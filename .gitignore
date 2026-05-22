@@ -147,3 +147,13 @@ cython_debug/
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# Home Assistant local test setup files
+home-assistant_v2.db*
+.storage/
+configuration.yaml
+automations.yaml
+scenes.yaml
+scripts.yaml
+blueprints/
+tts/
