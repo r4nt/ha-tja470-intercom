@@ -3,9 +3,9 @@
   "name": "Hager TJA470 Intercom",
   "codeowners": ["@klimek"],
   "config_flow": true,
-  "dependencies": ["ffmpeg"],
+  "dependencies": ["ffmpeg", "frontend", "http"],
   "documentation": "https://github.com/r4nt/tja470-intercom-api",
   "iot_class": "local_polling",
-  "requirements": ["aiotja470-intercom==0.1.4"],
+  "requirements": ["aiotja470-intercom==0.1.5"],
   "version": "1.0.0"
 }

@@ -1,4 +1,4 @@
-.PHONY: clean test run
+.PHONY: clean test run stop
 
 test:
 	.venv/bin/pytest tests/ -o asyncio_mode=auto
@@ -19,7 +19,11 @@ run:
 		echo "Initializing Home Assistant with default user 'test' (password 'test')..."; \
 		.venv/bin/python scripts/create_user.py; \
 	fi
+	.venv/bin/python scripts/setup_lovelace.py
 	.venv/bin/hass -c .
+
+stop:
+	-pkill -f ".venv/bin/hass"
 
 
 

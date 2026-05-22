@@ -33,6 +33,9 @@ async def test_setup_unload_entry(hass: HomeAssistant) -> None:
         return_value=ProvisioningInfo(
             sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
             rtsp_video_url="rtsp://some_url",
+            http_video_url="http://some_http_url",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
             called_elements=[
                 CalledElement(sip_id="4000", name="Driveway", order=0),
                 CalledElement(sip_id="4001", name="Frontdoor", order=1),
@@ -74,6 +77,9 @@ async def test_services(hass: HomeAssistant) -> None:
         return_value=ProvisioningInfo(
             sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
             rtsp_video_url="rtsp://some_url",
+            http_video_url="http://some_http_url",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
         )
     )
     mock_client.open_door = AsyncMock()
@@ -142,3 +148,79 @@ async def test_services(hass: HomeAssistant) -> None:
             "sip_username": "6004",
             "sip_password": "pwd",
         }
+
+
+async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
+    """Test dynamic Lovelace resource registration."""
+    from custom_components.tja470_intercom import async_register_lovelace_resource
+    from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+
+    mock_resources = MagicMock()
+    mock_resources.loaded = False
+    mock_resources.async_load = AsyncMock()
+    mock_resources.async_items = MagicMock(return_value=[])
+    mock_resources.async_create_item = AsyncMock()
+    mock_resources.async_update_item = AsyncMock()
+
+    mock_lovelace = MagicMock()
+    mock_lovelace.resources = mock_resources
+    mock_lovelace.resource_mode = "storage"
+
+    hass.data["lovelace"] = mock_lovelace
+
+    # Mock hass.http
+    hass.http = MagicMock()
+    hass.http.async_register_static_paths = AsyncMock()
+
+    # Test case 1: hass.is_running is True -> registers immediately
+    with patch.object(hass, "is_running", True):
+        await async_register_lovelace_resource(hass)
+
+    # Verify load was called since loaded is False
+    mock_resources.async_load.assert_called_once()
+
+    # Verify the item is created
+    mock_resources.async_create_item.assert_called_once_with({
+        "res_type": "module",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.0",
+    })
+
+    # Test case 2: hass.is_running is False -> registers after EVENT_HOMEASSISTANT_STARTED
+    mock_resources.async_load.reset_mock()
+    mock_resources.async_create_item.reset_mock()
+    mock_resources.loaded = False
+
+    with patch.object(hass, "is_running", False):
+        await async_register_lovelace_resource(hass)
+
+    # Should NOT be registered immediately since hass is not running
+    mock_resources.async_create_item.assert_not_called()
+
+    # Fire the event
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+
+    # Now it should be registered
+    mock_resources.async_create_item.assert_called_once_with({
+        "res_type": "module",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.0",
+    })
+
+    # Test case 3: updating resource when version is different
+    mock_resources.async_load.reset_mock()
+    mock_resources.async_create_item.reset_mock()
+    mock_resources.loaded = True
+    mock_resources.async_items = MagicMock(return_value=[
+        {"id": "card_id", "url": "/tja470-intercom/tja470-intercom-card.js?v=0.9.0"}
+    ])
+
+    with patch.object(hass, "is_running", True):
+        await async_register_lovelace_resource(hass)
+
+    mock_resources.async_load.assert_not_called()
+    mock_resources.async_create_item.assert_not_called()
+    mock_resources.async_update_item.assert_called_once_with(
+        "card_id",
+        {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.0"}
+    )
+

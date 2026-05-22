@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.tja470_intercom.const import CONF_UUID, DOMAIN
-from aiotja470_intercom.models import ProvisioningInfo, Manifest, SipInfo, CalledElement
+from aiotja470_intercom.models import ProvisioningInfo, Manifest, SipInfo, CalledElement, RemoteAccessInfo
 
 pytestmark = pytest.mark.asyncio
 
@@ -34,9 +34,27 @@ async def test_platforms(hass: HomeAssistant) -> None:
         return_value=ProvisioningInfo(
             sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
             rtsp_video_url="rtsp://${ipadress}:9099/high",
+            http_video_url="http://192.168.42.2:8021/mjpg/high",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
             called_elements=[
                 CalledElement(sip_id="4000", name="Driveway", order=0),
             ],
+            remote_access=RemoteAccessInfo(
+                sip_id="6005",
+                sip_password="pwd",
+                ngrok_url="mj6lwhdsws2bybjllh8fe10f.eu.ngrok.io",
+                rtsp_url="7.tcp.eu.ngrok.io",
+                rtsp_port=28867,
+                sip_tcp_url="5.tcp.eu.ngrok.io",
+                sip_tcp_port=22896,
+                ws_port=443,
+                stun_turn_prefix="stunserver=stun",
+                stun_turn_user="stun_user",
+                stun_turn_password="stun_pwd",
+                stun_turn_hostname="global.turn.twilio.com",
+                stun_turn_port=3478,
+            )
         )
     )
     mock_client.open_door = AsyncMock()
@@ -79,6 +97,22 @@ async def test_platforms(hass: HomeAssistant) -> None:
             # Case 3: FFmpeg returns None (error/timeout)
             mock_get_image.return_value = None
             assert await camera_entity.async_camera_image() is None
+
+        # Verify extra state attributes on the camera entity
+        attrs = camera_entity.extra_state_attributes
+        assert attrs["sip_username"] == "6004"
+        assert attrs["sip_password"] == "pwd"
+        assert attrs["local_ip_address"] == "192.168.42.2"
+        assert attrs["door_release_allowed"] is True
+        assert attrs["local_http_video_url"] == "http://192.168.42.2:8021/mjpg/high"
+        assert attrs["stun_server"] == "global.turn.twilio.com"
+        assert attrs["stun_port"] == 3478
+        assert attrs["stun_username"] == "stun_user"
+        assert attrs["stun_password"] == "stun_pwd"
+        assert attrs["remote_rtsp_url"] == "rtsp://7.tcp.eu.ngrok.io:28867/high"
+        assert attrs["remote_sip_server"] == "5.tcp.eu.ngrok.io"
+        assert attrs["remote_sip_port"] == 22896
+        assert attrs["remote_sip_ws_port"] == 443
 
         # Verify Sensor platform
         sip_username_eid = next((eid for eid in states if eid.endswith("sip_username")), None)

@@ -68,8 +68,69 @@ class TJA470Coordinator(DataUpdateCoordinator[dict]):
             raise UpdateFailed(f"Error communicating with TJA470: {err}") from err
 
 
+async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
+    """Register Lovelace resource dynamically."""
+    import os
+    www_dir = os.path.join(os.path.dirname(__file__), "www")
+
+    # Serve static path for the card
+    if hasattr(hass, "http"):
+        from homeassistant.components.http import StaticPathConfig
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(
+                "/tja470-intercom",
+                www_dir,
+                False,
+            )
+        ])
+
+    async def async_register(event=None) -> None:
+        """Register Lovelace resource in the frontend registry."""
+        if "lovelace" not in hass.data:
+            LOGGER.debug("Lovelace not in hass.data, skipping resource registration")
+            return
+
+        lovelace = hass.data["lovelace"]
+        if not hasattr(lovelace, "resources") or getattr(lovelace, "resource_mode", None) != "storage":
+            LOGGER.debug("Lovelace is in YAML mode or resources not accessible, skipping resource registration")
+            return
+
+        resources = lovelace.resources
+        if not resources.loaded:
+            await resources.async_load()
+
+        url = "/tja470-intercom/tja470-intercom-card.js?v=1.0.0"
+
+        # Check if already registered
+        for item in resources.async_items():
+            if item.get("url", "").startswith("/tja470-intercom/tja470-intercom-card.js"):
+                if item.get("url") != url:
+                    LOGGER.debug("Updating Lovelace resource version to %s", url)
+                    await resources.async_update_item(
+                        item["id"],
+                        {"res_type": "module", "url": url}
+                    )
+                return
+
+        # Not registered yet, create it
+        LOGGER.debug("Registering Lovelace resource: %s", url)
+        await resources.async_create_item({
+            "res_type": "module",
+            "url": url,
+        })
+
+    if hass.is_running:
+        await async_register()
+    else:
+        from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, async_register)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Hager TJA470 Intercom from a config entry."""
+    # Register Lovelace custom card resource dynamically
+    await async_register_lovelace_resource(hass)
+
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]

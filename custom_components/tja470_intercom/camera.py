@@ -1,6 +1,8 @@
 """Camera platform for Hager TJA470 Intercom."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -73,3 +75,37 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
         host = self.coordinator.entry.data[CONF_HOST]
         # Replace ${ipadress} placeholder with actual host IP
         return prov.rtsp_video_url.replace("${ipadress}", host)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return camera state attributes."""
+        prov = self.coordinator.data.get("provisioning")
+        if not prov:
+            return {}
+
+        attrs = {
+            "sip_username": prov.sip_info.sip_id,
+            "sip_password": prov.sip_info.sip_password,
+            "local_ip_address": prov.local_ip_address,
+            "door_release_allowed": prov.door_release_allowed,
+            "local_http_video_url": prov.http_video_url,
+        }
+
+        if prov.remote_access:
+            ra = prov.remote_access
+            attrs.update(
+                {
+                    "stun_server": ra.stun_turn_hostname,
+                    "stun_port": ra.stun_turn_port,
+                    "stun_username": ra.stun_turn_user,
+                    "stun_password": ra.stun_turn_password,
+                    "remote_rtsp_url": f"rtsp://{ra.rtsp_url}:{ra.rtsp_port}/high"
+                    if ra.rtsp_url
+                    else None,
+                    "remote_sip_server": ra.sip_tcp_url,
+                    "remote_sip_port": ra.sip_tcp_port,
+                    "remote_sip_ws_port": ra.ws_port,
+                }
+            )
+
+        return attrs

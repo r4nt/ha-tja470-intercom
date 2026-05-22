@@ -30,6 +30,9 @@ async def test_flow_success(hass: HomeAssistant) -> None:
         return_value=ProvisioningInfo(
             sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
             rtsp_video_url="rtsp://some_url",
+            http_video_url="http://some_http_url",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
         )
     )
 
@@ -89,6 +92,9 @@ async def test_flow_no_devices_initially(hass: HomeAssistant) -> None:
         return_value=ProvisioningInfo(
             sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
             rtsp_video_url="rtsp://some_url",
+            http_video_url="http://some_http_url",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
         )
     )
 

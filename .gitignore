@@ -154,6 +154,7 @@ home-assistant.log*
 .HA_VERSION
 .ha_run.lock
 .storage/
+.storage_backup/
 configuration.yaml
 secrets.yaml
 automations.yaml
