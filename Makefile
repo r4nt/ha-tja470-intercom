@@ -4,7 +4,24 @@ test:
 	.venv/bin/pytest tests/ -o asyncio_mode=auto
 
 run:
+	@if [ ! -f configuration.yaml ]; then \
+		echo "Creating minimal configuration.yaml..."; \
+		echo "frontend:" > configuration.yaml; \
+		echo "config:" >> configuration.yaml; \
+	fi
+	@if [ ! -d .storage ]; then \
+		mkdir -p .storage; \
+	fi
+	@if [ ! -f .storage/onboarding ]; then \
+		echo '{"version": 1, "minor_version": 1, "key": "onboarding", "data": {"done": ["user", "core_config", "integration"]}}' > .storage/onboarding; \
+	fi
+	@if [ ! -f .storage/auth ]; then \
+		echo "Initializing Home Assistant with default user 'test' (password 'test')..."; \
+		.venv/bin/python scripts/create_user.py; \
+	fi
 	.venv/bin/hass -c .
+
+
 
 clean:
 	# Clean python caches (excluding .venv)
