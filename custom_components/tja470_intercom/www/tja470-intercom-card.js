@@ -309,6 +309,7 @@ class TJA470IntercomCard extends HTMLElement {
         outline: none;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         user-select: none;
+        color: #ffffff;
       }
       .btn-unlock {
         background: linear-gradient(135deg, hsl(38, 100%, 43%), hsl(43, 100%, 48%));
@@ -377,18 +378,20 @@ class TJA470IntercomCard extends HTMLElement {
         border-radius: 6px;
         font-weight: 600;
         border: none;
-        background: rgba(255, 255, 255, 0.1);
+        background: linear-gradient(135deg, hsl(38, 100%, 43%), hsl(43, 100%, 48%));
         color: #fff;
         cursor: pointer;
         transition: all 0.2s ease;
         user-select: none;
+        box-shadow: 0 2px 8px rgba(217, 119, 6, 0.15);
       }
       .btn-mini-unlock:hover {
-        background: linear-gradient(135deg, hsl(38, 100%, 43%), hsl(43, 100%, 48%));
-        box-shadow: 0 2px 8px rgba(217, 119, 6, 0.2);
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(217, 119, 6, 0.3);
       }
       .btn-mini-unlock.confirm {
         background: linear-gradient(135deg, hsl(4, 90%, 55%), hsl(0, 85%, 58%));
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
         animation: shake 0.4s ease-in-out;
       }
       .drawer {
@@ -531,8 +534,8 @@ class TJA470IntercomCard extends HTMLElement {
     const imgEl = this._el('img', {
       class: 'video-stream',
       alt: 'Camera feed loading...',
-      onload: () => this._elements.loader.classList.add('hidden'),
-      onerror: () => this._elements.loader.classList.add('hidden')
+      onload: () => { clearTimeout(this._switchTimeout); this._elements.loader.classList.add('hidden'); },
+      onerror: () => { clearTimeout(this._switchTimeout); this._elements.loader.classList.add('hidden'); }
     });
     this._elements.img = imgEl;
 
@@ -867,7 +870,15 @@ class TJA470IntercomCard extends HTMLElement {
       entityId.replace(/_camera$/, '_switch_camera').replace(/^camera\./, 'button.');
 
     this._elements.loader.classList.remove('hidden');
+    // Reset token so the next _updateCard forces a stream src reload
+    this._currentToken = null;
     this._hass.callService('button', 'press', { entity_id: switchBtn });
+
+    // Safety: hide loader after 10s if stream never fires onload
+    clearTimeout(this._switchTimeout);
+    this._switchTimeout = setTimeout(() => {
+      this._elements.loader.classList.add('hidden');
+    }, 10000);
   }
 }
 
