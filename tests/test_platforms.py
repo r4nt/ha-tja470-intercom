@@ -64,6 +64,22 @@ async def test_platforms(hass: HomeAssistant) -> None:
         camera_eid = next((eid for eid in states if eid.startswith("camera.")), None)
         assert camera_eid is not None
 
+        camera_entity = hass.data["entity_components"]["camera"].get_entity(camera_eid)
+        assert camera_entity is not None
+
+        with patch("custom_components.tja470_intercom.camera.async_get_image") as mock_get_image:
+            # Case 1: FFmpeg returns valid JPEG bytes
+            mock_get_image.return_value = b"jpeg_bytes"
+            assert await camera_entity.async_camera_image() == b"jpeg_bytes"
+
+            # Case 2: FFmpeg returns empty bytes (timeout/offline)
+            mock_get_image.return_value = b""
+            assert await camera_entity.async_camera_image() is None
+
+            # Case 3: FFmpeg returns None (error/timeout)
+            mock_get_image.return_value = None
+            assert await camera_entity.async_camera_image() is None
+
         # Verify Sensor platform
         sip_username_eid = next((eid for eid in states if eid.endswith("sip_username")), None)
         assert sip_username_eid is None

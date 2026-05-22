@@ -51,12 +51,18 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
         if not stream_url:
             return None
 
+        # Prepend input options to let FFmpeg fail fast if the stream is offline/unreachable
+        input_source = f"-rtsp_transport tcp -timeout 5000000 -i {stream_url}"
+
         # Capture a snapshot frame from the RTSP stream using ha-ffmpeg helper
-        return await async_get_image(
+        image = await async_get_image(
             self.hass,
-            stream_url,
+            input_source,
             output_format="mjpeg",
         )
+        if not image:
+            return None
+        return image
 
     def stream_source(self) -> str | None:
         """Return the RTSP stream source."""
