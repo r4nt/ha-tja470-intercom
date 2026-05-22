@@ -150,10 +150,16 @@ Thumbs.db
 
 # Home Assistant local test setup files
 home-assistant_v2.db*
+home-assistant.log*
+.HA_VERSION
+.ha_run.lock
 .storage/
 configuration.yaml
+secrets.yaml
 automations.yaml
 scenes.yaml
 scripts.yaml
 blueprints/
 tts/
+
+

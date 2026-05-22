@@ -18,11 +18,16 @@ clean:
 	
 	# Clean Home Assistant local test setup artifacts
 	rm -rf home-assistant_v2.db*
-	rm -rf home-assistant.log
+	rm -rf home-assistant.log*
+	rm -f .HA_VERSION
+	rm -f .ha_run.lock
 	rm -rf .storage
 	rm -f configuration.yaml
+	rm -f secrets.yaml
 	rm -f automations.yaml
 	rm -f scenes.yaml
 	rm -f scripts.yaml
 	rm -rf blueprints
 	rm -rf tts
+
+
