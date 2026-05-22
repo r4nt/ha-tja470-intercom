@@ -1,0 +1,90 @@
+open_door:
+  name: Open Door
+  description: Trigger the door release command for the currently active camera feed.
+  fields:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom
+    door_id:
+      name: Door ID
+      description: The door release ID.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+
+open_door_at_position:
+  name: Open Door at Position
+  description: Switch the active camera feed to a specific position index and trigger the door release. This ensures the correct door/gate is released.
+  fields:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom
+    position:
+      name: Camera Position
+      description: The camera position index corresponding to the door.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 10
+    door_id:
+      name: Door ID
+      description: The door release ID.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+    max_attempts:
+      name: Max Switch Attempts
+      description: Maximum camera switches to perform before giving up.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+switch_camera:
+  name: Switch Camera
+  description: Switch the active camera feed. If position is specified, it cycles the feed until the target position is reached; otherwise, it cycles to the next position in the sequence.
+  fields:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom
+    position:
+      name: Target Position
+      description: Target camera position index to switch to.
+      selector:
+        number:
+          min: 0
+          max: 10
+    max_attempts:
+      name: Max Switch Attempts
+      description: Maximum camera switches to perform before giving up.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+get_sip_credentials:
+  name: Get SIP Credentials
+  description: Retrieves the SIP credentials for the intercom. This service returns response data and does not store the credentials in the state machine history.
+  fields:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom

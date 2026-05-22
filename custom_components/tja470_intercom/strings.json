@@ -1,0 +1,34 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Hager TJA470 Intercom",
+        "description": "Please enter the connection details for your Hager TJA470 Intercom.",
+        "data": {
+          "host": "IP Address or Hostname",
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "no_devices": {
+        "title": "No Free Client Slots Available",
+        "description": "No free device slots were found on the Hager TJA470 Intercom. Please:\n1. Log in to the TJA470 web config panel.\n2. Navigate to Settings > Access control / Clients.\n3. Add a new mobile device or client to free up a pairing slot.\n\nOnce added, click Submit to search again."
+      },
+      "free_device": {
+        "title": "Select Client Slot",
+        "description": "Select the free device slot to pair with this Home Assistant instance.",
+        "data": {
+          "device_id": "Device Slot"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Hager TJA470. Please verify the IP address or host.",
+      "invalid_auth": "Authentication failed. Please check the username and password.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This Hager TJA470 Intercom is already configured."
+    }
+  }
+}
