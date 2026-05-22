@@ -9,8 +9,8 @@ def main():
     lovelace_path = os.path.join(storage_dir, "lovelace")
     lovelace_resources_path = os.path.join(storage_dir, "lovelace_resources")
 
-    # 1. Write lovelace config if missing
-    if not os.path.exists(lovelace_path):
+    # 1. Write lovelace config if missing (HA migrates lovelace -> lovelace.lovelace on startup)
+    if not os.path.exists(lovelace_path) and not os.path.exists(os.path.join(storage_dir, "lovelace.lovelace")):
         lovelace_data = {
             "version": 1,
             "minor_version": 1,
@@ -23,17 +23,7 @@ def main():
                             "path": "overview",
                             "cards": [
                                 {
-                                    "type": "custom:tja470-intercom-card",
-                                    "door_buttons": [
-                                        {
-                                            "entity": "button.driveway_open",
-                                            "name": "Driveway"
-                                        },
-                                        {
-                                            "entity": "button.frontdoor_open",
-                                            "name": "Front Door"
-                                        }
-                                    ]
+                                    "type": "custom:tja470-intercom-card"
                                 }
                             ]
                         }

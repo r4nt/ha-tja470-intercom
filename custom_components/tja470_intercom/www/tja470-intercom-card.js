@@ -12,6 +12,8 @@ class TJA470IntercomCard extends HTMLElement {
     this._currentToken = null;
     this._currentEntityId = null;
     this._drawerOpen = false;
+    this._discoveredDoorButtons = null;
+    this._discoveryInProgress = false;
   }
 
   setConfig(config) {
@@ -37,13 +39,13 @@ class TJA470IntercomCard extends HTMLElement {
     }
 
     if (!entityId) {
-      this._renderError('Hager TJA470 Intercom camera entity not found.');
+      this._renderError('Hager TJA470 Intercom camera entity not found. Please configure the integration first.');
       return;
     }
 
     const stateObj = hass.states[entityId];
     if (!stateObj) {
-      this._renderError(`Entity not found: ${entityId}`);
+      this._renderError('Entity not found: ' + entityId);
       return;
     }
 
@@ -53,6 +55,62 @@ class TJA470IntercomCard extends HTMLElement {
       this._firstRender(stateObj);
     } else {
       this._updateCard(stateObj);
+    }
+
+    // Trigger door button auto-discovery if not already done and not manually configured
+    if (!this._discoveredDoorButtons && !this._discoveryInProgress && !(this._config && this._config.door_buttons)) {
+      this._discoverDoorButtons();
+    }
+  }
+
+  async _discoverDoorButtons() {
+    this._discoveryInProgress = true;
+    try {
+      // Query entity registry for all tja470_intercom entities
+      const entities = await this._hass.callWS({ type: 'config/entity_registry/list' });
+      const tjaEntities = entities.filter(e => e.platform === 'tja470_intercom');
+
+      // Find the camera entity's device_id (this is the controller device)
+      const cameraReg = tjaEntities.find(e => e.entity_id === this._resolvedEntityId);
+      if (!cameraReg) {
+        this._discoveredDoorButtons = [];
+        this._discoveryInProgress = false;
+        return;
+      }
+      const controllerDeviceId = cameraReg.device_id;
+
+      // Find button entities on OTHER devices (these are door station buttons)
+      const doorButtonEntities = tjaEntities.filter(e =>
+        e.entity_id.startsWith('button.') &&
+        e.device_id &&
+        e.device_id !== controllerDeviceId
+      );
+
+      if (doorButtonEntities.length === 0) {
+        this._discoveredDoorButtons = [];
+        this._discoveryInProgress = false;
+        this._updateExtraDoors();
+        return;
+      }
+
+      // Query device registry to get friendly device names
+      const devices = await this._hass.callWS({ type: 'config/device_registry/list' });
+      const deviceMap = {};
+      for (const dev of devices) {
+        deviceMap[dev.id] = dev.name || dev.name_by_user || 'Door Station';
+      }
+
+      // Build discovered door buttons list
+      this._discoveredDoorButtons = doorButtonEntities.map(e => ({
+        entity: e.entity_id,
+        name: deviceMap[e.device_id] || e.entity_id.split('.').pop().replace(/_open$/, '').replace(/_/g, ' ')
+      }));
+
+      this._discoveryInProgress = false;
+      this._updateExtraDoors();
+    } catch (err) {
+      this._discoveryInProgress = false;
+      this._discoveredDoorButtons = [];
     }
   }
 
@@ -697,7 +755,8 @@ class TJA470IntercomCard extends HTMLElement {
 
   _updateExtraDoors() {
     const extraDoorsContainer = this._elements.extraDoors;
-    const configuredDoors = this._config.door_buttons || [];
+    if (!extraDoorsContainer) return;
+    const configuredDoors = (this._config && this._config.door_buttons) || this._discoveredDoorButtons || [];
 
     // Clear old elements if list length differs or layout needs refresh
     extraDoorsContainer.replaceChildren();
