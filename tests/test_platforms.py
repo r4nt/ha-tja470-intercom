@@ -91,6 +91,10 @@ async def test_platforms(hass: HomeAssistant) -> None:
         assert rtsp_url_eid is not None
         assert states[rtsp_url_eid].state == "rtsp://192.168.42.2:9099/high"
 
+        # Verify Switch Camera platform
+        switch_camera_btn = next((eid for eid in states if eid.endswith("switch_camera")), None)
+        assert switch_camera_btn is not None
+
         # Action: Press the Active Door Release button
         await hass.services.async_call(
             "button",
@@ -110,3 +114,13 @@ async def test_platforms(hass: HomeAssistant) -> None:
         mock_client.open_door_at_position.assert_called_once_with(
             "some-uuid", 0, door_id=1
         )
+
+        # Action: Press the Switch Camera button
+        mock_client.switch_camera = AsyncMock(return_value=1)
+        await hass.services.async_call(
+            "button",
+            SERVICE_PRESS,
+            {ATTR_ENTITY_ID: switch_camera_btn},
+            blocking=True,
+        )
+        mock_client.switch_camera.assert_called_once_with("some-uuid")
