@@ -1,9 +1,12 @@
 """The Hager TJA470 Intercom integration."""
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import voluptuous as vol
+from aiohttp import web
 
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
@@ -11,8 +14,9 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from pyVoIP.VoIP import CallState
 
-from aiotja470_intercom import TJA470IntercomClient, AiohttpRunner
+from aiotja470_intercom import TJA470IntercomClient, AiohttpRunner, TJA470SipPhone, TJA470SipCall
 from aiotja470_intercom.exceptions import TJA470AuthError, TJA470Error
 
 from .const import CONF_COOKIES, CONF_UUID, DOMAIN, LOGGER
@@ -23,6 +27,73 @@ SERVICE_OPEN_DOOR = "open_door"
 SERVICE_OPEN_DOOR_AT_POSITION = "open_door_at_position"
 SERVICE_SWITCH_CAMERA = "switch_camera"
 SERVICE_GET_SIP_CREDENTIALS = "get_sip_credentials"
+SERVICE_ANSWER_CALL = "answer_call"
+SERVICE_HANGUP_CALL = "hangup_call"
+SERVICE_INITIATE_CALL = "initiate_call"
+SERVICE_TRIGGER_INCOMING_RING = "trigger_incoming_ring"
+
+
+class TJA470AudioStreamView(HomeAssistantView):
+    """Websocket view for audio streaming."""
+    url = "/api/tja470_intercom/audio_stream"
+    name = "api:tja470_intercom:audio_stream"
+    requires_auth = False
+
+    async def get(self, request: web.Request) -> web.WebSocketResponse:
+        """Handle websocket connection."""
+        hass = request.app["hass"]
+        entry_id = request.query.get("entry_id")
+        token = request.query.get("token")
+
+        if not token:
+            return web.Response(status=401, text="Unauthorized")
+
+        refresh_token = await hass.auth.async_validate_access_token(token)
+        if refresh_token is None:
+            return web.Response(status=401, text="Unauthorized")
+
+        if not entry_id or entry_id not in hass.data[DOMAIN]:
+            return web.Response(status=400, text="Invalid entry_id")
+
+        entry_data = hass.data[DOMAIN][entry_id]
+        active_call = entry_data.get("active_call")
+        if not active_call:
+            return web.Response(status=400, text="No active call")
+
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+
+        LOGGER.info("Websocket audio stream connected for call: %s", active_call)
+
+        async def send_audio():
+            try:
+                # Wait until call is answered
+                while active_call.state in (CallState.RINGING, CallState.DIALING):
+                    if ws.closed or active_call.state == CallState.ENDED:
+                        break
+                    await asyncio.sleep(0.1)
+
+                async for frame in active_call.audio_stream(convert_16bit=True):
+                    if ws.closed:
+                        break
+                    await ws.send_bytes(frame)
+            except Exception as e:
+                LOGGER.error("Error sending audio to websocket: %s", e)
+
+        async def receive_audio():
+            try:
+                async for msg in ws:
+                    if msg.type == web.WSMsgType.BINARY:
+                        await active_call.write_audio_16bit(msg.data)
+                    elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.CLOSING, web.WSMsgType.CLOSED):
+                        break
+            except Exception as e:
+                LOGGER.error("Error receiving audio from websocket: %s", e)
+
+        # Run send and receive concurrently
+        await asyncio.gather(send_audio(), receive_audio())
+        LOGGER.info("Websocket audio stream disconnected")
+        return ws
 
 
 class TJA470Coordinator(DataUpdateCoordinator[dict]):
@@ -58,9 +129,15 @@ class TJA470Coordinator(DataUpdateCoordinator[dict]):
                 new_data = {**self.entry.data, CONF_COOKIES: updated_cookies}
                 self.hass.config_entries.async_update_entry(self.entry, data=new_data)
 
+            sip_phone = None
+            if self.entry.entry_id in self.hass.data.get(DOMAIN, {}):
+                sip_phone = self.hass.data[DOMAIN][self.entry.entry_id].get("sip_phone")
+            sip_status = sip_phone.get_status().name if sip_phone else "INACTIVE"
+
             return {
                 "provisioning": provisioning_info,
                 "manifest": manifest,
+                "sip_status": sip_status,
             }
         except TJA470AuthError as err:
             raise ConfigEntryAuthFailed("Authentication failed") from err
@@ -145,11 +222,64 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = TJA470Coordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
+    # Get local source IP address for SIP phone
+    from homeassistant.components.network import async_get_source_ip
+    local_ip = await async_get_source_ip(hass, host)
+
+    # Initialize SIP phone client
+    prov = coordinator.data["provisioning"]
+    sip_info = prov.sip_info
+    
+    sip_phone = TJA470SipPhone(
+        host=host,
+        sip_id=sip_info.sip_id,
+        sip_password=sip_info.sip_password,
+        local_ip=local_ip,
+    )
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "coordinator": coordinator,
+        "sip_phone": sip_phone,
+        "active_call": None,
     }
+
+    # Register callbacks on SIP phone
+    async def handle_incoming_call(call: TJA470SipCall) -> None:
+        LOGGER.info("Incoming SIP call from %s", call.caller)
+        call.is_outgoing = False
+        hass.data[DOMAIN][entry.entry_id]["active_call"] = call
+        from homeassistant.helpers.dispatcher import async_dispatcher_send
+        async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+
+        async def monitor_call() -> None:
+            while call.state not in (CallState.ENDED, None):
+                await asyncio.sleep(0.5)
+            LOGGER.info("SIP call ended: %s", call)
+            if hass.data[DOMAIN][entry.entry_id].get("active_call") == call:
+                hass.data[DOMAIN][entry.entry_id]["active_call"] = None
+            async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+
+        hass.async_create_task(monitor_call())
+
+    async def handle_registration_state(state) -> None:
+        LOGGER.info("SIP registration state changed: %s", state)
+        from homeassistant.helpers.dispatcher import async_dispatcher_send
+        async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+
+    sip_phone.register_incoming_call_callback(handle_incoming_call)
+    sip_phone.register_registration_state_callback(handle_registration_state)
+
+    try:
+        await sip_phone.start()
+    except Exception as err:
+        LOGGER.error("Failed to start SIP phone: %s", err)
+
+    # Register the websocket view once
+    if "websocket_view_registered" not in hass.data[DOMAIN]:
+        hass.http.register_view(TJA470AudioStreamView())
+        hass.data[DOMAIN]["websocket_view_registered"] = True
 
     # Register devices
     device_registry = dr.async_get(hass)
@@ -164,7 +294,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     # Door station devices
-    prov = coordinator.data["provisioning"]
     for element in prov.called_elements:
         if element.order is not None:
             device_registry.async_get_or_create(
@@ -179,23 +308,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Register custom services
+    async def async_resolve_entry_ids(call_data: dict) -> list[str]:
+        """Resolve device_id or entity_id to config entry IDs."""
+        device_ids = call_data.get("device_id", [])
+        entity_ids = call_data.get("entity_id", [])
+        entry_ids = []
+
+        if entity_ids:
+            from homeassistant.helpers import entity_registry as er
+            ent_reg = er.async_get(hass)
+            for ent_id in entity_ids:
+                ent = ent_reg.async_get(ent_id)
+                if ent and ent.config_entry_id:
+                    entry_ids.append(ent.config_entry_id)
+
+        if device_ids:
+            device_reg = dr.async_get(hass)
+            for dev_id in device_ids:
+                device = device_reg.async_get(dev_id)
+                if device:
+                    entry_ids.extend(device.config_entries)
+
+        if not entry_ids:
+            entry_ids = [k for k in hass.data[DOMAIN].keys() if k != "websocket_view_registered"]
+
+        return list(set(entry_ids))
+
     async def async_resolve_clients(device_ids: list[str]) -> list[TJA470IntercomClient]:
         """Resolve device IDs to intercom clients."""
         clients: list[TJA470IntercomClient] = []
-        if not device_ids:
-            # Fallback to all loaded entries
-            for val in hass.data[DOMAIN].values():
-                clients.append(val["client"])
-            return clients
-
-        device_reg = dr.async_get(hass)
-        for dev_id in device_ids:
-            device = device_reg.async_get(dev_id)
-            if not device:
-                continue
-            for entry_id in device.config_entries:
-                if entry_id in hass.data[DOMAIN]:
-                    clients.append(hass.data[DOMAIN][entry_id]["client"])
+        entry_ids = await async_resolve_entry_ids({"device_id": device_ids})
+        for entry_id in entry_ids:
+            if entry_id in hass.data[DOMAIN]:
+                clients.append(hass.data[DOMAIN][entry_id]["client"])
         return list(set(clients))
 
     async def handle_open_door(call: ServiceCall) -> None:
@@ -223,11 +368,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise HomeAssistantError("No TJA470 integration clients found")
 
         for cli in clients:
-            # We need the client uuid associated with this entry
-            # Let's find which entry matches the client
             client_uuid = None
             for val in hass.data[DOMAIN].values():
-                if val["client"] == cli:
+                if isinstance(val, dict) and val.get("client") == cli:
                     client_uuid = val["coordinator"].entry.data[CONF_UUID]
                     break
             if not client_uuid:
@@ -253,7 +396,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for cli in clients:
             client_uuid = None
             for val in hass.data[DOMAIN].values():
-                if val["client"] == cli:
+                if isinstance(val, dict) and val.get("client") == cli:
                     client_uuid = val["coordinator"].entry.data[CONF_UUID]
                     break
             if not client_uuid:
@@ -278,7 +421,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         client = clients[0]
         coordinator = None
         for val in hass.data[DOMAIN].values():
-            if val["client"] == client:
+            if isinstance(val, dict) and val.get("client") == client:
                 coordinator = val["coordinator"]
                 break
         if not coordinator or not coordinator.data or "provisioning" not in coordinator.data:
@@ -291,6 +434,129 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "sip_username": sip_info.sip_id,
             "sip_password": sip_info.sip_password,
         }
+
+    async def handle_answer_call(call: ServiceCall) -> None:
+        """Service handler to answer the active call."""
+        entry_ids = await async_resolve_entry_ids(call.data)
+        for entry_id in entry_ids:
+            if entry_id in hass.data[DOMAIN]:
+                active_call = hass.data[DOMAIN][entry_id].get("active_call")
+                if active_call:
+                    try:
+                        await active_call.answer()
+                    except Exception as err:
+                        raise HomeAssistantError(f"Failed to answer call: {err}") from err
+                    finally:
+                        from homeassistant.helpers.dispatcher import async_dispatcher_send
+                        async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+
+    async def handle_hangup_call(call: ServiceCall) -> None:
+        """Service handler to hang up the active call."""
+        entry_ids = await async_resolve_entry_ids(call.data)
+        for entry_id in entry_ids:
+            if entry_id in hass.data[DOMAIN]:
+                active_call = hass.data[DOMAIN][entry_id].get("active_call")
+                if active_call:
+                    try:
+                        await active_call.hangup()
+                    except Exception as err:
+                        raise HomeAssistantError(f"Failed to hang up call: {err}") from err
+                    finally:
+                        hass.data[DOMAIN][entry_id]["active_call"] = None
+                        from homeassistant.helpers.dispatcher import async_dispatcher_send
+                        async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+
+    async def handle_initiate_call(call: ServiceCall) -> None:
+        """Service handler to initiate an outgoing call."""
+        number = call.data["number"]
+        entry_ids = await async_resolve_entry_ids(call.data)
+        for entry_id in entry_ids:
+            if entry_id in hass.data[DOMAIN]:
+                sip_phone = hass.data[DOMAIN][entry_id].get("sip_phone")
+                if sip_phone:
+                    class PlaceholderCall:
+                        def __init__(self, caller_id):
+                            self.caller = caller_id
+                            self.state = CallState.DIALING
+                            self.is_outgoing = True
+                        async def hangup(self):
+                            self.state = CallState.ENDED
+
+                    placeholder = PlaceholderCall(number)
+                    hass.data[DOMAIN][entry_id]["active_call"] = placeholder
+                    from homeassistant.helpers.dispatcher import async_dispatcher_send
+                    async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+
+                    try:
+                        outgoing_call = await sip_phone.call(number)
+                        outgoing_call.is_outgoing = True
+                        
+                        if hass.data[DOMAIN][entry_id].get("active_call") == placeholder:
+                            hass.data[DOMAIN][entry_id]["active_call"] = outgoing_call
+                            async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+                        else:
+                            try:
+                                await outgoing_call.hangup()
+                            except Exception:
+                                pass
+                            continue
+                        
+                        async def monitor_call() -> None:
+                            while outgoing_call.state not in (CallState.ENDED, None):
+                                await asyncio.sleep(0.5)
+                            LOGGER.info("SIP call ended: %s", outgoing_call)
+                            if hass.data[DOMAIN][entry_id].get("active_call") == outgoing_call:
+                                hass.data[DOMAIN][entry_id]["active_call"] = None
+                            async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+
+                        hass.async_create_task(monitor_call())
+                    except Exception as err:
+                        if hass.data[DOMAIN][entry_id].get("active_call") == placeholder:
+                            hass.data[DOMAIN][entry_id]["active_call"] = None
+                            async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+                        raise HomeAssistantError(f"Failed to initiate call to {number}: {err}") from err
+
+    async def handle_trigger_incoming_ring(call: ServiceCall) -> None:
+        """Service handler to trigger a simulated incoming ring."""
+        caller = call.data.get("caller", "4000")
+        entry_ids = await async_resolve_entry_ids(call.data)
+        for entry_id in entry_ids:
+            if entry_id in hass.data[DOMAIN]:
+                class MockSipCall:
+                    def __init__(self, caller_id):
+                        self.caller = caller_id
+                        self.state = CallState.RINGING
+                        self.is_outgoing = False
+                    async def answer(self):
+                        self.state = CallState.ANSWERED
+                        LOGGER.info("Mock call answered")
+                    async def hangup(self):
+                        self.state = CallState.ENDED
+                        LOGGER.info("Mock call hung up")
+                    async def deny(self):
+                        self.state = CallState.ENDED
+                        LOGGER.info("Mock call denied")
+                    async def audio_stream(self, frame_size=320, convert_16bit=True):
+                        while self.state == CallState.ANSWERED:
+                            yield b"\x00" * frame_size
+                            await asyncio.sleep(frame_size / 16000.0)
+                    async def write_audio_16bit(self, data):
+                        pass
+
+                mock_call = MockSipCall(caller)
+                hass.data[DOMAIN][entry_id]["active_call"] = mock_call
+                
+                from homeassistant.helpers.dispatcher import async_dispatcher_send
+                async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+                
+                async def monitor_call() -> None:
+                    while mock_call.state != CallState.ENDED:
+                        await asyncio.sleep(0.5)
+                    if hass.data[DOMAIN][entry_id].get("active_call") == mock_call:
+                        hass.data[DOMAIN][entry_id]["active_call"] = None
+                    async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+                    
+                hass.async_create_task(monitor_call())
 
     # Register services if they are not already registered
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN_DOOR):
@@ -348,19 +614,89 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             supports_response=SupportsResponse.ONLY,
         )
 
+    if not hass.services.has_service(DOMAIN, SERVICE_ANSWER_CALL):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_ANSWER_CALL,
+            handle_answer_call,
+            schema=vol.Schema(
+                {
+                    vol.Optional("device_id"): vol.All(cv.ensure_list, [cv.string]),
+                    vol.Optional("entity_id"): vol.All(cv.ensure_list, [cv.string]),
+                }
+            ),
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_HANGUP_CALL):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_HANGUP_CALL,
+            handle_hangup_call,
+            schema=vol.Schema(
+                {
+                    vol.Optional("device_id"): vol.All(cv.ensure_list, [cv.string]),
+                    vol.Optional("entity_id"): vol.All(cv.ensure_list, [cv.string]),
+                }
+            ),
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_INITIATE_CALL):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_INITIATE_CALL,
+            handle_initiate_call,
+            schema=vol.Schema(
+                {
+                    vol.Required("number"): cv.string,
+                    vol.Optional("device_id"): vol.All(cv.ensure_list, [cv.string]),
+                    vol.Optional("entity_id"): vol.All(cv.ensure_list, [cv.string]),
+                }
+            ),
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_TRIGGER_INCOMING_RING):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_TRIGGER_INCOMING_RING,
+            handle_trigger_incoming_ring,
+            schema=vol.Schema(
+                {
+                    vol.Optional("caller", default="4000"): cv.string,
+                    vol.Optional("device_id"): vol.All(cv.ensure_list, [cv.string]),
+                    vol.Optional("entity_id"): vol.All(cv.ensure_list, [cv.string]),
+                }
+            ),
+        )
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Stop SIP Phone client
+    if entry.entry_id in hass.data[DOMAIN]:
+        sip_phone = hass.data[DOMAIN][entry.entry_id].get("sip_phone")
+        if sip_phone:
+            try:
+                await sip_phone.stop()
+            except Exception as err:
+                LOGGER.error("Error stopping SIP phone client: %s", err)
+
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 
         # If no config entries left, remove services
-        if not hass.data[DOMAIN]:
+        remaining_entries = [k for k in hass.data[DOMAIN].keys() if k != "websocket_view_registered"]
+        if not remaining_entries:
             hass.services.async_remove(DOMAIN, SERVICE_OPEN_DOOR)
             hass.services.async_remove(DOMAIN, SERVICE_OPEN_DOOR_AT_POSITION)
             hass.services.async_remove(DOMAIN, SERVICE_SWITCH_CAMERA)
             hass.services.async_remove(DOMAIN, SERVICE_GET_SIP_CREDENTIALS)
+            hass.services.async_remove(DOMAIN, SERVICE_ANSWER_CALL)
+            hass.services.async_remove(DOMAIN, SERVICE_HANGUP_CALL)
+            hass.services.async_remove(DOMAIN, SERVICE_INITIATE_CALL)
+            hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_INCOMING_RING)
+            if "websocket_view_registered" in hass.data[DOMAIN]:
+                hass.data[DOMAIN].pop("websocket_view_registered")
 
     return unload_ok

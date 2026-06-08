@@ -42,6 +42,13 @@ SENSOR_DESCRIPTIONS: tuple[TJA470SensorEntityDescription, ...] = (
         if data["provisioning"].rtsp_video_url
         else None,
     ),
+    TJA470SensorEntityDescription(
+        key="sip_status",
+        name="SIP Registration Status",
+        icon="mdi:sip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, entry: data.get("sip_status", "INACTIVE"),
+    ),
 )
 
 

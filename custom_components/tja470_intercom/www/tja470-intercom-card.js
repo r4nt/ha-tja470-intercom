@@ -93,17 +93,23 @@ class TJA470IntercomCard extends HTMLElement {
         return;
       }
 
-      // Query device registry to get friendly device names
+      // Query device registry to get friendly device names and SIP IDs
       const devices = await this._hass.callWS({ type: 'config/device_registry/list' });
       const deviceMap = {};
+      const deviceSipMap = {};
       for (const dev of devices) {
         deviceMap[dev.id] = dev.name || dev.name_by_user || 'Door Station';
+        const tjaIdent = dev.identifiers && dev.identifiers.find(id => id[0] === 'tja470_intercom' && id[1].startsWith('door_'));
+        if (tjaIdent) {
+          deviceSipMap[dev.id] = tjaIdent[1].replace('door_', '');
+        }
       }
 
       // Build discovered door buttons list
       this._discoveredDoorButtons = doorButtonEntities.map(e => ({
         entity: e.entity_id,
-        name: deviceMap[e.device_id] || e.entity_id.split('.').pop().replace(/_open$/, '').replace(/_/g, ' ')
+        name: deviceMap[e.device_id] || e.entity_id.split('.').pop().replace(/_open$/, '').replace(/_/g, ' '),
+        sip_id: deviceSipMap[e.device_id] || null
       }));
 
       this._discoveryInProgress = false;
@@ -168,6 +174,65 @@ class TJA470IntercomCard extends HTMLElement {
     style.textContent = `
       :host {
         display: block;
+      }
+      .video-overlay-call-status {
+        position: absolute;
+        bottom: 44px;
+        left: 12px;
+        background: rgba(18, 18, 18, 0.85);
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: opacity 0.3s ease-in-out;
+      }
+      .video-overlay-call-status.hidden {
+        display: none;
+      }
+      .video-overlay-call-status .pulse-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+      }
+      .video-overlay-call-status.ringing .pulse-dot {
+        background-color: #22c55e;
+        box-shadow: 0 0 8px #22c55e;
+      }
+      .video-overlay-call-status.dialing .pulse-dot {
+        background-color: #3b82f6;
+        box-shadow: 0 0 8px #3b82f6;
+      }
+      .btn-answer {
+        background: linear-gradient(135deg, hsl(120, 60%, 40%), hsl(120, 60%, 32%));
+        color: #ffffff;
+        box-shadow: 0 4px 14px rgba(34, 197, 94, 0.25);
+      }
+      .btn-answer:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(34, 197, 94, 0.35);
+      }
+      .btn-answer:active {
+        transform: translateY(0);
+      }
+      .btn-call-hangup {
+        background: linear-gradient(135deg, hsl(0, 75%, 55%), hsl(0, 75%, 45%));
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+      }
+      .btn-call-hangup:hover {
+        background: linear-gradient(135deg, hsl(0, 75%, 55%), hsl(0, 75%, 45%));
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(239, 68, 68, 0.35);
+      }
+      .btn.hidden {
+        display: none;
       }
       ha-card {
         background: var(--ha-card-background, var(--card-background-color, #1c1c1e));
@@ -372,6 +437,30 @@ class TJA470IntercomCard extends HTMLElement {
         font-size: 0.85rem;
         font-weight: 500;
       }
+      .extra-door-buttons {
+        display: flex;
+        gap: 8px;
+      }
+      .btn-mini-call {
+        padding: 6px 12px;
+        font-size: 0.75rem;
+        border-radius: 6px;
+        font-weight: 600;
+        border: none;
+        background: linear-gradient(135deg, hsl(120, 60%, 40%), hsl(120, 60%, 30%));
+        color: #fff;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+        box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+      }
+      .btn-mini-call:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(34, 197, 94, 0.25);
+      }
+      .btn-mini-call:active {
+        transform: translateY(0);
+      }
       .btn-mini-unlock {
         padding: 6px 12px;
         font-size: 0.75rem;
@@ -545,6 +634,13 @@ class TJA470IntercomCard extends HTMLElement {
 
     this._elements.liveTitle = document.createTextNode('Stream Inactive');
     
+    this._elements.callStatusText = document.createTextNode('');
+    const callStatusBadge = this._el('div', { class: 'video-overlay-call-status hidden' }, [
+      this._el('span', { class: 'pulse-dot' }),
+      this._elements.callStatusText
+    ]);
+    this._elements.callStatusBadge = callStatusBadge;
+
     const streamContainer = this._el('div', { class: 'video-container' }, [
       this._el('div', { class: 'video-overlay-live' }, [
         this._el('div', { class: 'pulse-dot' }),
@@ -553,6 +649,7 @@ class TJA470IntercomCard extends HTMLElement {
       this._el('div', { class: 'video-overlay-title' }, [
         this._elements.liveTitle
       ]),
+      callStatusBadge,
       this._elements.loader,
       imgEl
     ]);
@@ -581,9 +678,30 @@ class TJA470IntercomCard extends HTMLElement {
     ]);
     this._elements.switchBtn = switchBtn;
 
+    this._elements.hangupText = document.createTextNode('Hang Up');
+    const hangupBtn = this._el('button', {
+      class: 'btn btn-call-hangup hidden',
+      onclick: () => this._handleHangupCall()
+    }, [
+      this._svg('<svg class="btn-icon" viewBox="0 0 24 24"><path d="M12,9c-2.3,0-4.6,0.3-6.7,1c-0.6,0.2-1.1,0.7-1.1,1.4v2.2c0,0.8,0.5,1.4,1.2,1.6c1.8,0.5,3.7,0.8,5.6,0.8 c1.9,0,3.8-0.3,5.6-0.8c0.7-0.2,1.2-0.8,1.2-1.6V11.4c0-0.7-0.5-1.2-1.1-1.4C16.6,9.3,14.3,9,12,9z"/></svg>'),
+      this._el('span', {}, [this._elements.hangupText])
+    ]);
+    this._elements.hangupBtn = hangupBtn;
+
+    const answerBtn = this._el('button', {
+      class: 'btn btn-answer hidden',
+      onclick: () => this._handleAnswerCall()
+    }, [
+      this._svg('<svg class="btn-icon" viewBox="0 0 24 24"><path d="M6.62,10.79C8.06,13.62 10.38,15.94 13.21,17.38L15.41,15.18C15.69,14.9 16.08,14.82 16.43,14.93C17.55,15.3 18.75,15.5 20,15.5A1,1 0 0,1 21,16.5V20A1,1 0 0,1 20,21A17,17 0 0,1 3,4A1,1 0 0,1 4,3H7.5A1,1 0 0,1 8.5,4C8.5,5.25 8.7,6.45 9.07,7.57C9.18,7.92 9.1,8.31 8.82,8.59L6.62,10.79Z"/></svg>'),
+      this._el('span', {}, ['Answer'])
+    ]);
+    this._elements.answerBtn = answerBtn;
+
     const controls = this._el('div', { class: 'controls' }, [
       unlockBtn,
-      switchBtn
+      switchBtn,
+      hangupBtn,
+      answerBtn
     ]);
 
     // Extra Door Stations
@@ -754,6 +872,71 @@ class TJA470IntercomCard extends HTMLElement {
 
     // 5. Build extra door rows if configured
     this._updateExtraDoors();
+
+    // 6. Call management and audio streaming
+    const callState = attr.call_state || 'idle';
+    const caller = attr.caller || 'Unknown Caller';
+
+    // Show/hide/update call status badge in the video container
+    const callStatusBadge = this._elements.callStatusBadge;
+    if (callState === 'ringing' || callState === 'dialing') {
+      callStatusBadge.classList.remove('hidden');
+      if (callState === 'ringing') {
+        callStatusBadge.classList.add('ringing');
+        callStatusBadge.classList.remove('dialing');
+        this._elements.callStatusText.nodeValue = `Incoming Call: ${caller}`;
+      } else {
+        callStatusBadge.classList.add('dialing');
+        callStatusBadge.classList.remove('ringing');
+        this._elements.callStatusText.nodeValue = `Calling ${caller}...`;
+      }
+    } else {
+      callStatusBadge.classList.add('hidden');
+      callStatusBadge.classList.remove('ringing', 'dialing');
+    }
+
+    // Toggle switch/hangup/answer buttons in the controls section
+    if (callState === 'ringing') {
+      this._elements.switchBtn.classList.add('hidden');
+      this._elements.unlockBtn.classList.add('hidden');
+      this._elements.answerBtn.classList.remove('hidden');
+      this._elements.hangupText.nodeValue = 'Decline';
+      this._elements.hangupBtn.classList.remove('hidden');
+      
+      if (this._audioStreaming) {
+        this._stopCallAudio();
+      }
+    } else if (callState === 'dialing') {
+      this._elements.switchBtn.classList.add('hidden');
+      this._elements.unlockBtn.classList.remove('hidden');
+      this._elements.answerBtn.classList.add('hidden');
+      this._elements.hangupText.nodeValue = 'Cancel';
+      this._elements.hangupBtn.classList.remove('hidden');
+      
+      if (this._audioStreaming) {
+        this._stopCallAudio();
+      }
+    } else if (callState === 'answered') {
+      this._elements.switchBtn.classList.add('hidden');
+      this._elements.unlockBtn.classList.remove('hidden');
+      this._elements.answerBtn.classList.add('hidden');
+      this._elements.hangupText.nodeValue = 'Hang Up';
+      this._elements.hangupBtn.classList.remove('hidden');
+      
+      if (!this._audioStreaming) {
+        this._startCallAudio(attr.config_entry_id);
+      }
+    } else {
+      // Idle
+      this._elements.switchBtn.classList.remove('hidden');
+      this._elements.unlockBtn.classList.remove('hidden');
+      this._elements.answerBtn.classList.add('hidden');
+      this._elements.hangupBtn.classList.add('hidden');
+      
+      if (this._audioStreaming) {
+        this._stopCallAudio();
+      }
+    }
   }
 
   _updateExtraDoors() {
@@ -778,9 +961,20 @@ class TJA470IntercomCard extends HTMLElement {
         isConfirming ? 'Sure?' : 'Unlock'
       ]);
 
+      const buttons = [miniBtn];
+      if (door.sip_id) {
+        const callBtn = this._el('button', {
+          class: 'btn-mini-call',
+          onclick: () => this._handleInitiateCallForSip(door.sip_id)
+        }, [
+          'Call'
+        ]);
+        buttons.unshift(callBtn);
+      }
+
       const row = this._el('div', { class: 'extra-door-row' }, [
         this._el('span', { class: 'extra-door-name' }, [doorName]),
-        miniBtn
+        this._el('div', { class: 'extra-door-buttons' }, buttons)
       ]);
 
       extraDoorsContainer.appendChild(row);
@@ -861,6 +1055,124 @@ class TJA470IntercomCard extends HTMLElement {
         .catch(err => {
           this._updateExtraDoors();
         });
+    }
+  }
+
+  _handleAnswerCall() {
+    const entityId = this._resolvedEntityId || this._config.entity;
+    this._hass.callService('tja470_intercom', 'answer_call', { entity_id: entityId });
+  }
+
+  _handleHangupCall() {
+    const entityId = this._resolvedEntityId || this._config.entity;
+    this._hass.callService('tja470_intercom', 'hangup_call', { entity_id: entityId });
+  }
+
+  _handleInitiateCallForSip(sipId) {
+    const entityId = this._resolvedEntityId || this._config.entity;
+    this._hass.callService('tja470_intercom', 'initiate_call', {
+      entity_id: entityId,
+      number: sipId
+    });
+  }
+
+  async _startCallAudio(entryId) {
+    if (this._audioStreaming) return;
+    this._audioStreaming = true;
+
+    try {
+      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
+      this._nextPlayTime = 0;
+
+      this._micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this._micSource = this._audioCtx.createMediaStreamSource(this._micStream);
+      
+      this._micProcessor = this._audioCtx.createScriptProcessor(2048, 1, 1);
+      this._micProcessor.onaudioprocess = (e) => {
+        if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          const s = Math.max(-1, Math.min(1, inputData[i]));
+          pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        this._ws.send(pcmData.buffer);
+      };
+      
+      this._micSource.connect(this._micProcessor);
+      this._micProcessor.connect(this._audioCtx.destination);
+
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const token = this._hass.auth.data.access_token;
+      const wsUrl = `${proto}//${window.location.host}/api/tja470_intercom/audio_stream?entry_id=${entryId}&token=${token}`;
+      
+      this._ws = new WebSocket(wsUrl);
+      this._ws.binaryType = 'arraybuffer';
+      
+      this._ws.onmessage = async (event) => {
+        if (!this._audioCtx || this._audioCtx.state === 'suspended') return;
+        const arrayBuffer = event.data;
+        const int16Array = new Int16Array(arrayBuffer);
+        
+        const float32Array = new Float32Array(int16Array.length);
+        for (let i = 0; i < int16Array.length; i++) {
+          float32Array[i] = int16Array[i] / 32768.0;
+        }
+        
+        const buffer = this._audioCtx.createBuffer(1, float32Array.length, 8000);
+        buffer.copyToChannel(float32Array, 0);
+        
+        const source = this._audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(this._audioCtx.destination);
+        
+        const now = this._audioCtx.currentTime;
+        if (this._nextPlayTime < now) {
+          this._nextPlayTime = now;
+        }
+        source.start(this._nextPlayTime);
+        this._nextPlayTime += buffer.duration;
+      };
+
+      this._ws.onclose = () => {
+        this._stopCallAudio();
+      };
+      
+      this._ws.onerror = (err) => {
+        this._stopCallAudio();
+      };
+
+    } catch (err) {
+      console.error("Failed to start intercom audio streaming:", err);
+      this._stopCallAudio();
+    }
+  }
+
+  _stopCallAudio() {
+    this._audioStreaming = false;
+
+    if (this._micProcessor) {
+      try { this._micProcessor.disconnect(); } catch(e){}
+      this._micProcessor = null;
+    }
+    if (this._micSource) {
+      try { this._micSource.disconnect(); } catch(e){}
+      this._micSource = null;
+    }
+    if (this._micStream) {
+      this._micStream.getTracks().forEach(track => track.stop());
+      this._micStream = null;
+    }
+
+    if (this._audioCtx) {
+      try { this._audioCtx.close(); } catch(e){}
+      this._audioCtx = null;
+    }
+
+    if (this._ws) {
+      try { this._ws.close(); } catch(e){}
+      this._ws = null;
     }
   }
 

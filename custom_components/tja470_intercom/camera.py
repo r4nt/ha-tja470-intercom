@@ -45,6 +45,18 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Register callbacks."""
+        await super().async_added_to_hass()
+        from homeassistant.helpers.dispatcher import async_dispatcher_connect
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{DOMAIN}_{self.coordinator.entry.entry_id}_call_update",
+                self.async_write_ha_state,
+            )
+        )
+
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
@@ -84,6 +96,7 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
             return {}
 
         attrs = {
+            "config_entry_id": self.coordinator.entry.entry_id,
             "sip_username": prov.sip_info.sip_id,
             "sip_password": prov.sip_info.sip_password,
             "local_ip_address": prov.local_ip_address,
@@ -107,5 +120,23 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
                     "remote_sip_ws_port": ra.ws_port,
                 }
             )
+
+        # Include active call state
+        active_call = self.hass.data[DOMAIN][self.coordinator.entry.entry_id].get("active_call")
+        if active_call:
+            from pyVoIP.VoIP import CallState
+            if active_call.state == CallState.ANSWERED:
+                attrs["call_state"] = "answered"
+            elif active_call.state in (CallState.RINGING, CallState.DIALING):
+                if getattr(active_call, "is_outgoing", False):
+                    attrs["call_state"] = "dialing"
+                else:
+                    attrs["call_state"] = "ringing"
+            else:
+                attrs["call_state"] = "idle"
+            attrs["caller"] = active_call.caller
+        else:
+            attrs["call_state"] = "idle"
+            attrs["caller"] = None
 
         return attrs

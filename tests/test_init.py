@@ -224,3 +224,115 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
         {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.0"}
     )
 
+
+async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> None:
+    """Test the newly added call services."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "host": "192.168.42.2",
+            "username": "manuel",
+            "password": "pwd",
+            CONF_UUID: "some-uuid",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    mock_client = MagicMock()
+    mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
+    mock_client.get_provisioning = AsyncMock(
+        return_value=ProvisioningInfo(
+            sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
+            rtsp_video_url="rtsp://some_url",
+            http_video_url="http://some_http_url",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
+        )
+    )
+    mock_client.get_cookies = MagicMock(return_value={})
+
+    with patch(
+        "custom_components.tja470_intercom.TJA470IntercomClient",
+        return_value=mock_client,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        # Trigger simulated incoming ring
+        await hass.services.async_call(
+            DOMAIN,
+            "trigger_incoming_ring",
+            {"caller": "6001"},
+            blocking=True,
+        )
+        
+        active_call = hass.data[DOMAIN][entry.entry_id]["active_call"]
+        assert active_call is not None
+        assert active_call.caller == "6001"
+        assert active_call.is_outgoing is False
+
+        # Verify camera entity call_state is "ringing"
+        camera_entity_ids = hass.states.async_entity_ids("camera")
+        assert len(camera_entity_ids) > 0
+        camera_state = hass.states.get(camera_entity_ids[0])
+        assert camera_state.attributes["call_state"] == "ringing"
+
+        # Answer active call
+        await hass.services.async_call(
+            DOMAIN,
+            "answer_call",
+            {},
+            blocking=True,
+        )
+        from pyVoIP.VoIP import CallState
+        assert active_call.state == CallState.ANSWERED
+        
+        camera_state = hass.states.get(camera_entity_ids[0])
+        assert camera_state.attributes["call_state"] == "answered"
+
+        # Hang up active call
+        await hass.services.async_call(
+            DOMAIN,
+            "hangup_call",
+            {},
+            blocking=True,
+        )
+        assert hass.data[DOMAIN][entry.entry_id]["active_call"] is None
+        camera_state = hass.states.get(camera_entity_ids[0])
+        assert camera_state.attributes["call_state"] == "idle"
+
+        # Test initiate_call (outgoing call)
+        mock_outgoing_call = MagicMock()
+        mock_outgoing_call.state = CallState.DIALING
+        mock_outgoing_call.caller = "6002"
+        mock_outgoing_call.hangup = AsyncMock()
+
+        mock_sip_phone.call = AsyncMock(return_value=mock_outgoing_call)
+
+        await hass.services.async_call(
+            DOMAIN,
+            "initiate_call",
+            {"number": "6002"},
+            blocking=True,
+        )
+
+        active_call = hass.data[DOMAIN][entry.entry_id]["active_call"]
+        assert active_call is not None
+        assert active_call.caller == "6002"
+        assert active_call.is_outgoing is True
+
+        camera_state = hass.states.get(camera_entity_ids[0])
+        assert camera_state.attributes["call_state"] == "dialing"
+
+        # Hang up active call
+        await hass.services.async_call(
+            DOMAIN,
+            "hangup_call",
+            {},
+            blocking=True,
+        )
+        assert hass.data[DOMAIN][entry.entry_id]["active_call"] is None
+        camera_state = hass.states.get(camera_entity_ids[0])
+        assert camera_state.attributes["call_state"] == "idle"
+
+

@@ -88,3 +88,87 @@ get_sip_credentials:
       selector:
         device:
           integration: tja470_intercom
+
+answer_call:
+  name: Answer Call
+  description: Answer the currently active incoming SIP call.
+  fields:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom
+    entity_id:
+      name: Target Entity
+      description: The Hager TJA470 Intercom Camera entity.
+      selector:
+        entity:
+          integration: tja470_intercom
+          domain: camera
+
+hangup_call:
+  name: Hang Up Call
+  description: Hang up or deny the currently active SIP call.
+  fields:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom
+    entity_id:
+      name: Target Entity
+      description: The Hager TJA470 Intercom Camera entity.
+      selector:
+        entity:
+          integration: tja470_intercom
+          domain: camera
+
+initiate_call:
+  name: Initiate Call
+  description: Initiate an outgoing SIP call to a specified number/extension.
+  fields:
+    number:
+      name: SIP Number/Extension
+      description: The SIP extension or number to call (e.g. 4000).
+      required: true
+      selector:
+        text:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom
+    entity_id:
+      name: Target Entity
+      description: The Hager TJA470 Intercom Camera entity.
+      selector:
+        entity:
+          integration: tja470_intercom
+          domain: camera
+
+trigger_incoming_ring:
+  name: Trigger Incoming Ring
+  description: Simulate an incoming call for testing/debugging purposes.
+  fields:
+    caller:
+      name: Caller ID
+      description: The caller identifier/number to simulate (default "4000").
+      default: "4000"
+      selector:
+        text:
+    device_id:
+      name: Target Device
+      description: The Hager TJA470 Intercom Controller device.
+      selector:
+        device:
+          integration: tja470_intercom
+    entity_id:
+      name: Target Entity
+      description: The Hager TJA470 Intercom Camera entity.
+      selector:
+        entity:
+          integration: tja470_intercom
+          domain: camera
