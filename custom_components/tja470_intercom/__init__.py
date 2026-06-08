@@ -48,7 +48,7 @@ class TJA470AudioStreamView(HomeAssistantView):
         if not token:
             return web.Response(status=401, text="Unauthorized")
 
-        refresh_token = await hass.auth.async_validate_access_token(token)
+        refresh_token = hass.auth.async_validate_access_token(token)
         if refresh_token is None:
             return web.Response(status=401, text="Unauthorized")
 
@@ -176,7 +176,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
         if not resources.loaded:
             await resources.async_load()
 
-        url = "/tja470-intercom/tja470-intercom-card.js?v=1.0.0"
+        url = "/tja470-intercom/tja470-intercom-card.js?v=1.0.5"
 
         # Check if already registered
         for item in resources.async_items():
@@ -490,6 +490,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     try:
                         outgoing_call = await sip_phone.call(number)
                         outgoing_call.is_outgoing = True
+                        outgoing_call.dest_number = number
                         
                         if hass.data[DOMAIN][entry_id].get("active_call") == placeholder:
                             hass.data[DOMAIN][entry_id]["active_call"] = outgoing_call

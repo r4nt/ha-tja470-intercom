@@ -134,7 +134,10 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
                     attrs["call_state"] = "ringing"
             else:
                 attrs["call_state"] = "idle"
-            attrs["caller"] = active_call.caller
+            if getattr(active_call, "is_outgoing", False):
+                attrs["caller"] = getattr(active_call, "dest_number", active_call.caller)
+            else:
+                attrs["caller"] = active_call.caller
         else:
             attrs["call_state"] = "idle"
             attrs["caller"] = None

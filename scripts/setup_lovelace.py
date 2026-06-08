@@ -44,7 +44,7 @@ def main():
             "data": {
                 "items": [
                     {
-                        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.0",
+                        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.5",
                         "type": "module",
                         "id": "tja470_intercom_card"
                     }
