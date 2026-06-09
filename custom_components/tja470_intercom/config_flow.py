@@ -7,8 +7,10 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import config_validation as cv
 
 from aiotja470_intercom import TJA470IntercomClient, AiohttpRunner
 from aiotja470_intercom.exceptions import TJA470AuthError, TJA470ConnectionError, TJA470Error
@@ -165,4 +167,69 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> TJA470OptionsFlowHandler:
+        """Get the options flow for this handler."""
+        return TJA470OptionsFlowHandler(config_entry)
+
+
+class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Hager TJA470 Intercom."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            if "notify_devices_text" in user_input:
+                val = user_input.pop("notify_devices_text")
+                user_input["notify_devices"] = [
+                    x.strip() for x in val.split(",") if x.strip()
+                ]
+            return self.async_create_entry(title="", data=user_input)
+
+        notify_services = []
+        if "notify" in self.hass.services.async_services():
+            notify_services = sorted(
+                [
+                    service
+                    for service in self.hass.services.async_services()["notify"]
+                    if service.startswith("mobile_app_")
+                ]
+            )
+
+        schema = {}
+        if notify_services:
+            schema[
+                vol.Optional(
+                    "notify_devices",
+                    default=self.config_entry.options.get("notify_devices", []),
+                )
+            ] = cv.multi_select({s: s for s in notify_services})
+        else:
+            schema[
+                vol.Optional(
+                    "notify_devices_text",
+                    default=",".join(self.config_entry.options.get("notify_devices", [])),
+                )
+            ] = str
+
+        schema[
+            vol.Optional(
+                "dashboard_path",
+                default=self.config_entry.options.get("dashboard_path", "/intercom"),
+            )
+        ] = str
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(schema),
         )

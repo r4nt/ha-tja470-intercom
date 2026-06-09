@@ -30,5 +30,18 @@
     "abort": {
       "already_configured": "This Hager TJA470 Intercom is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Intercom Notifications",
+        "description": "Configure which devices receive ring notifications and dashboard link details.",
+        "data": {
+          "notify_devices": "Devices to notify",
+          "notify_devices_text": "Devices to notify (comma-separated)",
+          "dashboard_path": "Dashboard Path"
+        }
+      }
+    }
   }
 }

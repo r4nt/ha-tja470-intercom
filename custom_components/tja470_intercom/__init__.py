@@ -253,6 +253,50 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         from homeassistant.helpers.dispatcher import async_dispatcher_send
         async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
 
+        # Send notifications if configured
+        async def send_notifications() -> None:
+            options = entry.options
+            notify_devices = options.get("notify_devices", [])
+            dashboard_path = options.get("dashboard_path", "/intercom")
+
+            if not notify_devices:
+                return
+
+            caller_name = call.caller
+            if coordinator and coordinator.data and "provisioning" in coordinator.data:
+                prov = coordinator.data["provisioning"]
+                for element in prov.called_elements:
+                    if element.sip_id == call.caller:
+                        if element.name:
+                            caller_name = element.name
+                        break
+
+            for device in notify_devices:
+                service_name = device
+                if service_name.startswith("notify."):
+                    service_name = service_name.split(".", 1)[1]
+
+                LOGGER.debug("Sending incoming call notification to notify.%s", service_name)
+                try:
+                    await hass.services.async_call(
+                        "notify",
+                        service_name,
+                        {
+                            "title": "Intercom Call",
+                            "message": f"Incoming call from {caller_name}",
+                            "data": {
+                                "ttl": 0,
+                                "priority": "high",
+                                "channel": "intercom",
+                                "clickAction": dashboard_path,
+                            },
+                        },
+                    )
+                except Exception as err:
+                    LOGGER.error("Failed to send notification to notify.%s: %s", service_name, err)
+
+        hass.async_create_task(send_notifications())
+
         async def monitor_call() -> None:
             while call.state not in (CallState.ENDED, None):
                 await asyncio.sleep(0.5)
