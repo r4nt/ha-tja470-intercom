@@ -176,7 +176,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
         if not resources.loaded:
             await resources.async_load()
 
-        url = "/tja470-intercom/tja470-intercom-card.js?v=1.0.5"
+        url = "/tja470-intercom/tja470-intercom-card.js?v=1.0.9"
 
         # Check if already registered
         for item in resources.async_items():
@@ -503,11 +503,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             continue
                         
                         async def monitor_call() -> None:
+                            last_state = outgoing_call.state
                             while outgoing_call.state not in (CallState.ENDED, None):
+                                if outgoing_call.state != last_state:
+                                    last_state = outgoing_call.state
+                                    LOGGER.info("SIP call state changed to: %s", last_state)
+                                    async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
                                 await asyncio.sleep(0.5)
                             LOGGER.info("SIP call ended: %s", outgoing_call)
                             if hass.data[DOMAIN][entry_id].get("active_call") == outgoing_call:
-                                hass.data[DOMAIN][entry_id]["active_call"] = None
+                                    hass.data[DOMAIN][entry_id]["active_call"] = None
                             async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
 
                         hass.async_create_task(monitor_call())

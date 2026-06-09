@@ -337,9 +337,14 @@ class TJA470IntercomCard extends HTMLElement {
       this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
       this._nextPlayTime = 0;
 
-      try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          this._micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Acquire microphone stream asynchronously so it doesn't block the WebSocket initialization
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          if (!this._audioStreaming) {
+            stream.getTracks().forEach(track => track.stop());
+            return;
+          }
+          this._micStream = stream;
           this._micSource = this._audioCtx.createMediaStreamSource(this._micStream);
           
           this._micProcessor = this._audioCtx.createScriptProcessor(2048, 1, 1);
@@ -357,9 +362,9 @@ class TJA470IntercomCard extends HTMLElement {
           
           this._micSource.connect(this._micProcessor);
           this._micProcessor.connect(this._audioCtx.destination);
-        }
-      } catch (micErr) {
-        console.warn("Intercom microphone acquisition failed (listen-only mode):", micErr);
+        }).catch((micErr) => {
+          console.warn("Intercom microphone acquisition failed (listen-only mode):", micErr);
+        });
       }
 
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

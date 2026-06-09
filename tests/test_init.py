@@ -182,7 +182,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     # Verify the item is created
     mock_resources.async_create_item.assert_called_once_with({
         "res_type": "module",
-        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.5",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.9",
     })
 
     # Test case 2: hass.is_running is False -> registers after EVENT_HOMEASSISTANT_STARTED
@@ -203,7 +203,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     # Now it should be registered
     mock_resources.async_create_item.assert_called_once_with({
         "res_type": "module",
-        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.5",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.9",
     })
 
     # Test case 3: updating resource when version is different
@@ -221,7 +221,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     mock_resources.async_create_item.assert_not_called()
     mock_resources.async_update_item.assert_called_once_with(
         "card_id",
-        {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.5"}
+        {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.0.9"}
     )
 
 
