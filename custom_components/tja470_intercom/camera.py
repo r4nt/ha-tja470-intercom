@@ -61,7 +61,7 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
         """Return bytes of camera image from RTSP stream."""
-        stream_url = self.stream_source()
+        stream_url = await self.stream_source()
         if not stream_url:
             return None
 
@@ -78,7 +78,7 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
             return None
         return image
 
-    def stream_source(self) -> str | None:
+    async def stream_source(self) -> str | None:
         """Return the RTSP stream source."""
         prov = self.coordinator.data.get("provisioning")
         if not prov or not prov.rtsp_video_url:
