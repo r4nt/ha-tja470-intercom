@@ -324,6 +324,28 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
         camera_state = hass.states.get(camera_entity_ids[0])
         assert camera_state.attributes["call_state"] == "dialing"
 
+        # Test initiating a call while a call is already active
+        mock_outgoing_call2 = MagicMock()
+        mock_outgoing_call2.state = CallState.DIALING
+        mock_outgoing_call2.caller = "6003"
+        mock_outgoing_call2.hangup = AsyncMock()
+
+        mock_sip_phone.call = AsyncMock(return_value=mock_outgoing_call2)
+
+        await hass.services.async_call(
+            DOMAIN,
+            "initiate_call",
+            {"number": "6003"},
+            blocking=True,
+        )
+
+        # The previous call should have been hung up
+        mock_outgoing_call.hangup.assert_called_once()
+
+        active_call = hass.data[DOMAIN][entry.entry_id]["active_call"]
+        assert active_call is not None
+        assert active_call.caller == "6003"
+
         # Hang up active call
         await hass.services.async_call(
             DOMAIN,

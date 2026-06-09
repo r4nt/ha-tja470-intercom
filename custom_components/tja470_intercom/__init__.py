@@ -474,6 +474,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if entry_id in hass.data[DOMAIN]:
                 sip_phone = hass.data[DOMAIN][entry_id].get("sip_phone")
                 if sip_phone:
+                    # Hang up any existing active call first
+                    old_call = hass.data[DOMAIN][entry_id].get("active_call")
+                    if old_call:
+                        try:
+                            await old_call.hangup()
+                        except Exception as e:
+                            LOGGER.debug("Failed to hang up previous call before initiating new call: %s", e)
+
                     class PlaceholderCall:
                         def __init__(self, caller_id):
                             self.caller = caller_id
