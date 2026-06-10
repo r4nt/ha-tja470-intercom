@@ -208,11 +208,9 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
         mobile_devices = {}
         
         for entry in mobile_app_entries:
-            device_id = entry.data.get("device_id")
-            if not device_id:
-                continue
-
-            target_service = f"notify.mobile_app_{device_id}"
+            raw_device_name = entry.data.get("device_name") or entry.title or "Mobile Device"
+            from homeassistant.util import slugify
+            target_service = f"notify.{slugify(f'mobile_app_{raw_device_name}')}"
 
             # Find matching device in device registry
             device_entry = None
@@ -239,9 +237,9 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
                     if last_seen_dt:
                         last_seen_str = last_seen_dt.strftime("%Y-%m-%d %H:%M:%S")
 
-            device_name = (device_entry and device_entry.name) or entry.data.get("device_name") or entry.title or "Mobile Device"
+            display_name = (device_entry and device_entry.name) or raw_device_name
             mobile_devices[target_service] = {
-                "name": device_name,
+                "name": display_name,
                 "last_seen_str": last_seen_str,
                 "last_seen_dt": last_seen_dt,
             }
