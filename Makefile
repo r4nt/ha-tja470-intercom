@@ -23,7 +23,7 @@ run:
 		echo "Initializing Home Assistant with default user 'test' (password 'test')..."; \
 		.venv/bin/python scripts/create_user.py; \
 	fi
-	.venv/bin/python scripts/setup_lovelace.py
+	.venv/bin/python scripts/inject_config.py
 	.venv/bin/hass -c .
 
 stop:
