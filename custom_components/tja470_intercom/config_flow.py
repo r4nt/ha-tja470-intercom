@@ -199,12 +199,17 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
         notify_services = []
         if "notify" in self.hass.services.async_services():
             notify_services = sorted(
-                [
-                    service
-                    for service in self.hass.services.async_services()["notify"]
-                    if service.startswith("mobile_app_")
-                ]
+                list(self.hass.services.async_services()["notify"].keys())
             )
+
+        # Get device trackers and their status
+        device_trackers = self.hass.states.async_all("device_tracker")
+        tracker_lines = []
+        for dt in device_trackers:
+            name = dt.attributes.get("friendly_name") or dt.entity_id
+            last_seen = getattr(dt, "last_reported", None) or dt.last_updated
+            last_seen_str = last_seen.strftime("%Y-%m-%d %H:%M:%S") if last_seen else "unknown"
+            tracker_lines.append(f"- {name} ({dt.entity_id}): last seen {last_seen_str}")
 
         schema = {}
         if notify_services:
@@ -232,4 +237,7 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(schema),
+            description_placeholders={
+                "device_trackers": "\n".join(tracker_lines) if tracker_lines else "None found."
+            },
         )

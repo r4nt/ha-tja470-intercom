@@ -35,7 +35,7 @@
     "step": {
       "init": {
         "title": "Configure Intercom Notifications",
-        "description": "Configure which devices receive ring notifications and dashboard link details.",
+        "description": "Configure which devices receive ring notifications and dashboard link details.\n\n**Device Trackers Status:**\n{device_trackers}",
         "data": {
           "notify_devices": "Devices to notify",
           "notify_devices_text": "Devices to notify (comma-separated)",
