@@ -422,7 +422,7 @@ async def test_options_flow(hass: HomeAssistant) -> None:
 
 
 async def test_options_flow_with_device_trackers(hass: HomeAssistant) -> None:
-    """Test options flow shows device tracker last seen next to notify entities."""
+    """Test options flow shows device tracker last seen next to mobile app notify targets."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -435,25 +435,49 @@ async def test_options_flow_with_device_trackers(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
 
+    # Mock the mobile_app config entry
+    mobile_entry = MockConfigEntry(
+        domain="mobile_app",
+        data={
+            "device_id": "my_new_phone",
+            "device_name": "My New Phone",
+        },
+        entry_id="mobile_app_entry_id",
+    )
+    mobile_entry.add_to_hass(hass)
+
+    # Register in device registry
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_or_create(
+        config_entry_id=mobile_entry.entry_id,
+        identifiers={("mobile_app", "my_new_phone")},
+        name="My New Phone",
+    )
+
+    # Register device tracker in entity registry
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        domain="device_tracker",
+        platform="mobile_app",
+        unique_id="tracker_unique_id",
+        config_entry=mobile_entry,
+        device_id=device.id,
+        suggested_object_id="my_new_phone",
+    )
+
     # Add a device_tracker state to hass
     hass.states.async_set("device_tracker.my_new_phone", "home")
-    # Add a corresponding notify entity
-    hass.states.async_set("notify.my_new_phone", "online")
-
-    # Also register some notify service to ensure notify service registry is initialized
-    # but doesn't have the new phone yet
-    hass.services.async_register("notify", "persistent_notification", lambda call: None)
 
     # Initialize options flow
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] == "form"
     assert result["step_id"] == "init"
 
-    # The schema should offer the notify.my_new_phone service and persistent_notification
+    # The schema should offer the notify.mobile_app_my_new_phone service
     schema = result["data_schema"].schema
     assert "notify_devices" in schema
-    assert "notify.my_new_phone" in schema["notify_devices"].options
-    assert "persistent_notification" in schema["notify_devices"].options
+    assert "notify.mobile_app_my_new_phone" in schema["notify_devices"].options
 
     # The description placeholders should contain the matching tracker last seen
     assert "my_new_phone" in result["description_placeholders"]["device_trackers"]
@@ -462,12 +486,12 @@ async def test_options_flow_with_device_trackers(hass: HomeAssistant) -> None:
     result2 = await hass.config_entries.options.async_configure(
         result["flow_id"],
         user_input={
-            "notify_devices": ["notify.my_new_phone"],
+            "notify_devices": ["notify.mobile_app_my_new_phone"],
         },
     )
     assert result2["type"] == "create_entry"
     assert entry.options == {
-        "notify_devices": ["notify.my_new_phone"],
+        "notify_devices": ["notify.mobile_app_my_new_phone"],
     }
 
 
@@ -552,86 +576,8 @@ async def test_incoming_call_notification(hass: HomeAssistant, mock_sip_phone) -
             }
 
 
-async def test_incoming_call_notification_modern_entity(hass: HomeAssistant, mock_sip_phone) -> None:
-    """Test incoming call notifications are dispatched to modern notify entities."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "host": "192.168.42.2",
-            "username": "manuel",
-            "password": "pwd",
-            CONF_UUID: "some-uuid",
-        },
-        options={
-            "notify_devices": ["notify.manuel_s_phone_25"],
-        },
-    )
-    entry.add_to_hass(hass)
 
-    # Register the state for the notify entity
-    hass.states.async_set("notify.manuel_s_phone_25", "online")
 
-    mock_client = MagicMock()
-    mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
-    from aiotja470_intercom.models import CalledElement
-    mock_client.get_provisioning = AsyncMock(
-        return_value=ProvisioningInfo(
-            sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
-            rtsp_video_url="rtsp://some_url",
-            http_video_url="http://some_http_url",
-            local_ip_address="192.168.42.2",
-            door_release_allowed=True,
-            called_elements=[
-                CalledElement(sip_id="6001", name="Front Door", order=1),
-            ]
-        )
-    )
-    mock_client.get_cookies = MagicMock(return_value={})
-
-    with patch(
-        "custom_components.tja470_intercom.TJA470IntercomClient",
-        return_value=mock_client,
-    ):
-        assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-        # Get registered callback
-        incoming_callback = mock_sip_phone.register_incoming_call_callback.call_args[0][0]
-
-        # Create a mock incoming call from 6001 (which resolves to "Front Door")
-        from pyVoIP.VoIP import CallState
-        mock_call = MagicMock()
-        mock_call.caller = "6001"
-        mock_call.state = CallState.RINGING
-
-        # Spy on services
-        calls = []
-        @callback
-        def record_call(service_call):
-            calls.append(service_call)
-
-        hass.services.async_register(
-            "notify", "send_message", record_call
-        )
-
-        # Trigger incoming call callback
-        await incoming_callback(mock_call)
-        mock_call.state = CallState.ENDED
-        await hass.async_block_till_done()
-
-        # Verify notify.send_message was called with correct target/payload
-        assert len(calls) == 1
-        service_call = calls[0]
-        assert service_call.data["title"] == "Intercom Call"
-        assert service_call.data["message"] == "Incoming call from Front Door"
-        assert service_call.data["data"] == {
-            "ttl": 0,
-            "priority": "high",
-            "channel": "intercom",
-            "clickAction": "/intercom",
-        }
-        # Verify the target is correct
-        assert "notify.manuel_s_phone_25" in service_call.data["entity_id"]
 
 
 

@@ -196,46 +196,64 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
                 ]
             return self.async_create_entry(title="", data=user_input)
 
-        notify_services_set = set()
-        if "notify" in self.hass.services.async_services():
-            notify_services_set.update(self.hass.services.async_services()["notify"].keys())
+        # Query config entries and registries for mobile_app companion apps
+        from homeassistant.helpers import device_registry as dr, entity_registry as er
 
-        # Get all modern notify entities registered in the state machine
-        notify_entities = self.hass.states.async_all("notify")
-        for ne in notify_entities:
-            notify_services_set.add(ne.entity_id)
+        dev_reg = dr.async_get(self.hass)
+        ent_reg = er.async_get(self.hass)
 
-        # Include currently configured notify devices so they don't get lost
-        current_configured = self.config_entry.options.get("notify_devices", [])
-        notify_services_set.update(current_configured)
+        mobile_app_entries = self.hass.config_entries.async_entries("mobile_app")
 
-        notify_services = sorted(list(notify_services_set))
+        # Map target service (notify.mobile_app_device_id) to device name and tracker status
+        mobile_devices = {}
+        
+        for entry in mobile_app_entries:
+            device_id = entry.data.get("device_id")
+            if not device_id:
+                continue
 
-        # Get device trackers and map them to our actual notify services/entities
-        tracker_lines = []
-        for service in notify_services:
-            # Strip prefixes to get base name (e.g. notify.pixel_8 -> pixel_8, mobile_app_pixel_8 -> pixel_8)
-            base_id = service
-            if base_id.startswith("notify."):
-                base_id = base_id[7:]
-            if base_id.startswith("mobile_app_"):
-                base_id = base_id[11:]
+            target_service = f"notify.mobile_app_{device_id}"
 
-            tracker_state = self.hass.states.get(f"device_tracker.{base_id}")
-            if tracker_state:
-                name = tracker_state.attributes.get("friendly_name") or tracker_state.entity_id
-                last_seen = getattr(tracker_state, "last_reported", None) or tracker_state.last_updated
-                last_seen_str = last_seen.strftime("%Y-%m-%d %H:%M:%S") if last_seen else "unknown"
-                tracker_lines.append(f"- {name} ({service}): last seen {last_seen_str}")
+            # Find matching device in device registry
+            device_entry = None
+            for dev in dev_reg.devices.values():
+                if entry.entry_id in dev.config_entries:
+                    device_entry = dev
+                    break
 
+            # Find device_tracker entity ID
+            tracker_entity = None
+            if device_entry:
+                for entity in er.async_entries_for_device(ent_reg, device_entry.id):
+                    if entity.domain == "device_tracker":
+                        tracker_entity = entity.entity_id
+                        break
+
+            # Retrieve tracker last seen
+            last_seen_str = "unknown"
+            if tracker_entity:
+                tracker_state = self.hass.states.get(tracker_entity)
+                if tracker_state:
+                    last_seen = getattr(tracker_state, "last_reported", None) or tracker_state.last_updated
+                    if last_seen:
+                        last_seen_str = last_seen.strftime("%Y-%m-%d %H:%M:%S")
+
+            device_name = (device_entry and device_entry.name) or entry.data.get("device_name") or entry.title or "Mobile Device"
+            mobile_devices[target_service] = {
+                "name": device_name,
+                "last_seen": last_seen_str,
+            }
+
+        # Build schema using only the notify.mobile_app_... targets
         schema = {}
-        if notify_services:
+        if mobile_devices:
+            sorted_targets = sorted(list(mobile_devices.keys()))
             schema[
                 vol.Optional(
                     "notify_devices",
                     default=self.config_entry.options.get("notify_devices", []),
                 )
-            ] = cv.multi_select({s: s for s in notify_services})
+            ] = cv.multi_select({s: s for s in sorted_targets})
         else:
             schema[
                 vol.Optional(
@@ -244,6 +262,10 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
                 )
             ] = str
 
+        tracker_lines = [
+            f"- {info['name']} ({service}): last seen {info['last_seen']}"
+            for service, info in sorted(mobile_devices.items())
+        ]
 
         return self.async_show_form(
             step_id="init",
