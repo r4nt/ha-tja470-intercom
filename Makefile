@@ -8,6 +8,10 @@ run:
 		echo "Creating minimal configuration.yaml..."; \
 		echo "frontend:" > configuration.yaml; \
 		echo "config:" >> configuration.yaml; \
+		echo "logger:" >> configuration.yaml; \
+		echo "  default: warning" >> configuration.yaml; \
+		echo "  logs:" >> configuration.yaml; \
+		echo "    custom_components.tja470_intercom: debug" >> configuration.yaml; \
 	fi
 	@if [ ! -d .storage ]; then \
 		mkdir -p .storage; \

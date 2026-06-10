@@ -203,10 +203,33 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, async_register)
 
 
+async def async_register_custom_panel(hass: HomeAssistant) -> None:
+    """Register custom sidebar panel dynamically."""
+    # Check if already registered
+    url_path = "intercom"
+    if url_path in hass.data.get("frontend_panels", {}):
+        LOGGER.debug("Custom panel %s already registered", url_path)
+        return
+
+    LOGGER.debug("Registering custom panel: %s", url_path)
+    from homeassistant.components import panel_custom
+    await panel_custom.async_register_panel(
+        hass,
+        frontend_url_path=url_path,
+        webcomponent_name="tja470-intercom-panel",
+        sidebar_title="Intercom",
+        sidebar_icon="mdi:phone-in-talk",
+        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.0.9",
+        require_admin=False,
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Hager TJA470 Intercom from a config entry."""
     # Register Lovelace custom card resource dynamically
     await async_register_lovelace_resource(hass)
+    # Register custom sidebar panel dynamically
+    await async_register_custom_panel(hass)
 
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
@@ -257,7 +280,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async def send_notifications() -> None:
             options = entry.options
             notify_devices = options.get("notify_devices", [])
-            dashboard_path = options.get("dashboard_path", "/intercom")
 
             if not notify_devices:
                 return
@@ -288,7 +310,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 "ttl": 0,
                                 "priority": "high",
                                 "channel": "intercom",
-                                "clickAction": dashboard_path,
+                                "clickAction": "/intercom",
                             },
                         },
                     )

@@ -225,6 +225,37 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     )
 
 
+async def test_custom_panel_registration(hass: HomeAssistant) -> None:
+    """Test dynamic custom panel registration."""
+    from custom_components.tja470_intercom import async_register_custom_panel
+
+    hass.data["frontend_panels"] = {}
+
+    with patch(
+        "homeassistant.components.panel_custom.async_register_panel"
+    ) as mock_register:
+        await async_register_custom_panel(hass)
+
+        mock_register.assert_called_once_with(
+            hass,
+            frontend_url_path="intercom",
+            webcomponent_name="tja470-intercom-panel",
+            sidebar_title="Intercom",
+            sidebar_icon="mdi:phone-in-talk",
+            module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.0.9",
+            require_admin=False,
+        )
+
+    # Test case 2: Panel already registered -> skips registration
+    hass.data["frontend_panels"] = {"intercom": MagicMock()}
+    with patch(
+        "homeassistant.components.panel_custom.async_register_panel"
+    ) as mock_register:
+        await async_register_custom_panel(hass)
+
+        mock_register.assert_not_called()
+
+
 async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> None:
     """Test the newly added call services."""
     entry = MockConfigEntry(
@@ -382,13 +413,11 @@ async def test_options_flow(hass: HomeAssistant) -> None:
         result["flow_id"],
         user_input={
             "notify_devices_text": "mobile_app_phone1, mobile_app_phone2",
-            "dashboard_path": "/my-dashboard",
         },
     )
     assert result["type"] == "create_entry"
     assert entry.options == {
         "notify_devices": ["mobile_app_phone1", "mobile_app_phone2"],
-        "dashboard_path": "/my-dashboard",
     }
 
 
@@ -404,7 +433,6 @@ async def test_incoming_call_notification(hass: HomeAssistant, mock_sip_phone) -
         },
         options={
             "notify_devices": ["mobile_app_phone1", "mobile_app_phone2"],
-            "dashboard_path": "/my-dashboard",
         },
     )
     entry.add_to_hass(hass)
@@ -470,7 +498,7 @@ async def test_incoming_call_notification(hass: HomeAssistant, mock_sip_phone) -
                 "ttl": 0,
                 "priority": "high",
                 "channel": "intercom",
-                "clickAction": "/my-dashboard",
+                "clickAction": "/intercom",
             }
 
 

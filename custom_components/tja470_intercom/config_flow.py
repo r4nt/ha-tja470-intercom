@@ -227,12 +227,6 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
                 )
             ] = str
 
-        schema[
-            vol.Optional(
-                "dashboard_path",
-                default=self.config_entry.options.get("dashboard_path", "/intercom"),
-            )
-        ] = str
 
         return self.async_show_form(
             step_id="init",
