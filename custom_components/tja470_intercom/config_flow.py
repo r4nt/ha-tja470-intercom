@@ -230,47 +230,70 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
                         break
 
             # Retrieve tracker last seen
+            last_seen_dt = None
             last_seen_str = "unknown"
             if tracker_entity:
                 tracker_state = self.hass.states.get(tracker_entity)
                 if tracker_state:
-                    last_seen = getattr(tracker_state, "last_reported", None) or tracker_state.last_updated
-                    if last_seen:
-                        last_seen_str = last_seen.strftime("%Y-%m-%d %H:%M:%S")
+                    last_seen_dt = getattr(tracker_state, "last_reported", None) or tracker_state.last_updated
+                    if last_seen_dt:
+                        last_seen_str = last_seen_dt.strftime("%Y-%m-%d %H:%M:%S")
 
             device_name = (device_entry and device_entry.name) or entry.data.get("device_name") or entry.title or "Mobile Device"
             mobile_devices[target_service] = {
                 "name": device_name,
-                "last_seen": last_seen_str,
+                "last_seen_str": last_seen_str,
+                "last_seen_dt": last_seen_dt,
             }
+
+        # Sort the mobile devices by most recent last seen date
+        from datetime import datetime, timezone
+        def sort_key(item):
+            dt = item[1]["last_seen_dt"]
+            if dt is None:
+                return datetime.min.replace(tzinfo=timezone.utc)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+
+        sorted_devices = sorted(mobile_devices.items(), key=sort_key, reverse=True)
+        sorted_targets = [service for service, _ in sorted_devices]
+
+        # Determine pre-selected options, filtering out any old stale/deleted target entries
+        current_configured = self.config_entry.options.get("notify_devices", [])
+        default_selected = [
+            d for d in current_configured if d in mobile_devices
+        ]
 
         # Build schema using only the notify.mobile_app_... targets
         schema = {}
         if mobile_devices:
-            sorted_targets = sorted(list(mobile_devices.keys()))
             schema[
                 vol.Optional(
                     "notify_devices",
-                    default=self.config_entry.options.get("notify_devices", []),
+                    default=default_selected,
                 )
             ] = cv.multi_select({s: s for s in sorted_targets})
         else:
             schema[
                 vol.Optional(
                     "notify_devices_text",
-                    default=",".join(self.config_entry.options.get("notify_devices", [])),
+                    default=",".join(default_selected),
                 )
             ] = str
 
-        tracker_lines = [
-            f"- {info['name']} ({service}): last seen {info['last_seen']}"
-            for service, info in sorted(mobile_devices.items())
+        # Generate a Markdown table of devices and their status
+        table_lines = [
+            "| Device Name | Service ID | Last Seen |",
+            "| :--- | :--- | :--- |"
         ]
+        for service, info in sorted_devices:
+            table_lines.append(f"| {info['name']} | `{service}` | {info['last_seen_str']} |")
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(schema),
             description_placeholders={
-                "device_trackers": "\n".join(tracker_lines) if tracker_lines else "None found."
+                "device_trackers": "\n".join(table_lines) if mobile_devices else "No companion apps found."
             },
         )
