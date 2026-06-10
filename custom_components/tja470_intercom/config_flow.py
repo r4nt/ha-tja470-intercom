@@ -196,20 +196,37 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
                 ]
             return self.async_create_entry(title="", data=user_input)
 
-        notify_services = []
+        notify_services_set = set()
         if "notify" in self.hass.services.async_services():
-            notify_services = sorted(
-                list(self.hass.services.async_services()["notify"].keys())
-            )
+            notify_services_set.update(self.hass.services.async_services()["notify"].keys())
 
-        # Get device trackers and their status
-        device_trackers = self.hass.states.async_all("device_tracker")
+        # Get all modern notify entities registered in the state machine
+        notify_entities = self.hass.states.async_all("notify")
+        for ne in notify_entities:
+            notify_services_set.add(ne.entity_id)
+
+        # Include currently configured notify devices so they don't get lost
+        current_configured = self.config_entry.options.get("notify_devices", [])
+        notify_services_set.update(current_configured)
+
+        notify_services = sorted(list(notify_services_set))
+
+        # Get device trackers and map them to our actual notify services/entities
         tracker_lines = []
-        for dt in device_trackers:
-            name = dt.attributes.get("friendly_name") or dt.entity_id
-            last_seen = getattr(dt, "last_reported", None) or dt.last_updated
-            last_seen_str = last_seen.strftime("%Y-%m-%d %H:%M:%S") if last_seen else "unknown"
-            tracker_lines.append(f"- {name} ({dt.entity_id}): last seen {last_seen_str}")
+        for service in notify_services:
+            # Strip prefixes to get base name (e.g. notify.pixel_8 -> pixel_8, mobile_app_pixel_8 -> pixel_8)
+            base_id = service
+            if base_id.startswith("notify."):
+                base_id = base_id[7:]
+            if base_id.startswith("mobile_app_"):
+                base_id = base_id[11:]
+
+            tracker_state = self.hass.states.get(f"device_tracker.{base_id}")
+            if tracker_state:
+                name = tracker_state.attributes.get("friendly_name") or tracker_state.entity_id
+                last_seen = getattr(tracker_state, "last_reported", None) or tracker_state.last_updated
+                last_seen_str = last_seen.strftime("%Y-%m-%d %H:%M:%S") if last_seen else "unknown"
+                tracker_lines.append(f"- {name} ({service}): last seen {last_seen_str}")
 
         schema = {}
         if notify_services:

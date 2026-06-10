@@ -294,28 +294,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         break
 
             for device in notify_devices:
-                service_name = device
-                if service_name.startswith("notify."):
-                    service_name = service_name.split(".", 1)[1]
+                # Normalize full entity ID if user supplied it with/without notify. prefix
+                entity_id = device if device.startswith("notify.") else f"notify.{device}"
 
-                LOGGER.debug("Sending incoming call notification to notify.%s", service_name)
+                LOGGER.debug("Sending incoming call notification to %s", entity_id)
                 try:
-                    await hass.services.async_call(
-                        "notify",
-                        service_name,
-                        {
-                            "title": "Intercom Call",
-                            "message": f"Incoming call from {caller_name}",
-                            "data": {
-                                "ttl": 0,
-                                "priority": "high",
-                                "channel": "intercom",
-                                "clickAction": "/intercom",
+                    # Check if the device is registered as a modern notify entity in HA
+                    if hass.states.get(entity_id) is not None:
+                        LOGGER.debug("Using modern send_message service for notify entity: %s", entity_id)
+                        await hass.services.async_call(
+                            "notify",
+                            "send_message",
+                            {
+                                "message": f"Incoming call from {caller_name}",
+                                "title": "Intercom Call",
+                                "data": {
+                                    "ttl": 0,
+                                    "priority": "high",
+                                    "channel": "intercom",
+                                    "clickAction": "/intercom",
+                                },
                             },
-                        },
-                    )
+                            target={"entity_id": entity_id},
+                        )
+                    else:
+                        # Fallback to legacy notify service call
+                        service_name = entity_id.split(".", 1)[1]
+                        LOGGER.debug("Using legacy service notify.%s", service_name)
+                        await hass.services.async_call(
+                            "notify",
+                            service_name,
+                            {
+                                "title": "Intercom Call",
+                                "message": f"Incoming call from {caller_name}",
+                                "data": {
+                                    "ttl": 0,
+                                    "priority": "high",
+                                    "channel": "intercom",
+                                    "clickAction": "/intercom",
+                                },
+                            },
+                        )
                 except Exception as err:
-                    LOGGER.error("Failed to send notification to notify.%s: %s", service_name, err)
+                    LOGGER.error("Failed to send notification to %s: %s", entity_id, err)
 
         hass.async_create_task(send_notifications())
 
