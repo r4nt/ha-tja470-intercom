@@ -571,7 +571,7 @@ async def test_incoming_call_notification(hass: HomeAssistant, mock_sip_phone) -
             assert service_call.data["data"] == {
                 "ttl": 0,
                 "priority": "high",
-                "channel": "intercom",
+                "channel": "Intercom",
                 "clickAction": "/intercom",
             }
 

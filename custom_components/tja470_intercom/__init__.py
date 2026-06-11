@@ -308,7 +308,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "data": {
                                 "ttl": 0,
                                 "priority": "high",
-                                "channel": "intercom",
+                                "channel": "Intercom",
                                 "clickAction": "/intercom",
                             },
                         },
