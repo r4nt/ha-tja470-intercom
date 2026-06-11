@@ -4,6 +4,8 @@
 
 A custom integration for the **Hager TJA470 IP intercom** that brings live video, door control, and call handling directly into Home Assistant.
 
+![Intercom card](docs/screenshot.jpeg)
+
 ## Features
 
 - **Live camera stream** — the intercom's video feed appears as a standard HA camera entity
