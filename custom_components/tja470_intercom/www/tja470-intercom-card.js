@@ -145,10 +145,11 @@ class TJA470IntercomCard extends HTMLElement {
       }
       h2.title {
         margin: 0;
-        font-size: 1.25rem;
-        font-weight: 500;
-        color: var(--primary-text-color);
-        letter-spacing: -0.01em;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--secondary-text-color, #888);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
       .feed-container {
         position: relative;

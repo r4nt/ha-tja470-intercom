@@ -1,5 +1,5 @@
 if (!customElements.get('tja470-intercom-card')) {
-  import('/tja470-intercom/tja470-intercom-card.js?v=1.1.6');
+  import('/tja470-intercom/tja470-intercom-card.js?v=1.1.9');
 }
 
 class TJA470IntercomPanel extends HTMLElement {
@@ -41,7 +41,7 @@ class TJA470IntercomPanel extends HTMLElement {
 
       if (!this._card) {
         this._card = document.createElement('tja470-intercom-card');
-        this._card.setConfig({});
+        this._card.setConfig({ name: 'Intercom' });
         this.shadowRoot.getElementById('container').appendChild(this._card);
         if (this._hass) {
           this._card.hass = this._hass;
