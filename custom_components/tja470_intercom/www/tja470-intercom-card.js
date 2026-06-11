@@ -124,64 +124,356 @@ class TJA470IntercomCard extends HTMLElement {
 
     const style = document.createElement('style');
     style.textContent = `
-      img {
-        width: 100%;
-        max-width: 100%;
-        height: auto;
+      :host {
         display: block;
+      }
+      ha-card {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        border-radius: var(--ha-card-border-radius, 12px);
+        background: var(--ha-card-background, var(--card-background-color, #fff));
+        color: var(--primary-text-color, #212121);
+        transition: all 0.3s ease;
+        box-shadow: var(--ha-card-box-shadow, 0 2px 2px 0 rgba(0,0,0,0.14), 0 1px 5px 0 rgba(0,0,0,0.12), 0 3px 1px -2px rgba(0,0,0,0.2));
+      }
+      .header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      h2.title {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: var(--primary-text-color);
+        letter-spacing: -0.01em;
+      }
+      .feed-container {
+        position: relative;
+        width: 100%;
+        aspect-ratio: var(--aspect-ratio, 4 / 3);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--primary-background-color, #1a1a1a);
+        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4);
+      }
+      .feed-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.5s ease-in-out;
+        display: block;
+      }
+      .feed-container img.loaded {
+        opacity: 1;
+      }
+      .placeholder {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+        z-index: 1;
+        transition: opacity 0.3s ease;
+        background: linear-gradient(135deg, #2a2a2a 0%, #151515 100%);
+      }
+      .placeholder.hidden {
+        display: none !important;
+      }
+      .placeholder ha-icon {
+        --mdc-icon-size: 48px;
+        margin-bottom: 12px;
+        animation: pulse 2s infinite ease-in-out;
+        color: rgba(255, 255, 255, 0.5);
+      }
+      .placeholder span {
+        font-size: 0.95rem;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        color: rgba(255, 255, 255, 0.7);
+      }
+      .status-overlay {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        background: rgba(0, 0, 0, 0.65);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: #fff;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        z-index: 2;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--success-color, #4caf50);
+        box-shadow: 0 0 8px var(--success-color, #4caf50);
+      }
+      .status-dot.connecting {
+        background-color: var(--warning-color, #ff9800);
+        box-shadow: 0 0 8px var(--warning-color, #ff9800);
+        animation: blink 1.5s infinite ease-in-out;
+      }
+      .status-dot.offline {
+        background-color: var(--error-color, #f44336);
+        box-shadow: 0 0 8px var(--error-color, #f44336);
+      }
+      .status-dot.ringing {
+        background-color: var(--error-color, #f44336);
+        box-shadow: 0 0 8px var(--error-color, #f44336);
+        animation: blink 0.8s infinite ease-in-out;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+        gap: 8px;
+        margin-top: 4px;
+      }
+      button.btn {
+        background: var(--primary-color, #03a9f4);
+        color: var(--text-primary-color, #fff);
+        border: none;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      button.btn:hover:not(:disabled) {
+        background: var(--accent-color, #ff4081);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      }
+      button.btn:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      button.btn:disabled {
+        background: var(--disabled-text-color, #bdbdbd);
+        color: var(--text-disabled-color, #e0e0e0);
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+      button.btn-unlock {
+        background: var(--success-color, #4caf50);
+      }
+      button.btn-unlock:hover:not(:disabled) {
+        background: #43a047;
+      }
+      button.btn-decline {
+        background: var(--error-color, #f44336);
+      }
+      button.btn-decline:hover:not(:disabled) {
+        background: #d32f2f;
+      }
+      button.btn-answer {
+        background: var(--success-color, #4caf50);
+        animation: pulse-border 1.5s infinite;
+      }
+      button.btn-answer:hover:not(:disabled) {
+        background: #43a047;
+      }
+      button.btn-switch {
+        background: var(--secondary-background-color, #e0e0e0);
+        color: var(--primary-text-color, #212121);
+      }
+      button.btn-switch:hover:not(:disabled) {
+        background: var(--divider-color, #bdbdbd);
+      }
+      button.btn ha-icon {
+        --mdc-icon-size: 20px;
+      }
+      .extra-doors {
+        border-top: 1px solid var(--divider-color, #e0e0e0);
+        padding-top: 8px;
+        margin-top: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .extra-doors.hidden {
+        display: none !important;
+      }
+      .extra-door-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: var(--secondary-background-color, #fafafa);
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--divider-color, #e0e0e0);
+      }
+      .extra-door-name {
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+      .extra-door-actions {
+        display: flex;
+        gap: 6px;
+      }
+      button.btn-mini {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        border-radius: 6px;
+        gap: 2px;
+        flex-direction: row;
+      }
+      button.btn-mini ha-icon {
+        --mdc-icon-size: 14px;
       }
       .hidden {
         display: none !important;
+      }
+      
+      @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.6; }
+        50% { transform: scale(1.05); opacity: 1; }
+        100% { transform: scale(1); opacity: 0.6; }
+      }
+      @keyframes blink {
+        0% { opacity: 0.3; }
+        50% { opacity: 1; }
+        100% { opacity: 0.3; }
+      }
+      @keyframes pulse-border {
+        0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
       }
     `;
     this.shadowRoot.appendChild(style);
 
     const title = this._config.name || stateObj.attributes.friendly_name || 'Intercom';
+    
+    // Header
+    const headerContainer = document.createElement('div');
+    headerContainer.className = 'header-container';
     const header = document.createElement('h2');
+    header.className = 'title';
     header.textContent = title;
+    headerContainer.appendChild(header);
 
+    // Feed Container
+    const feedContainer = document.createElement('div');
+    feedContainer.className = 'feed-container';
+    if (this._config.aspect_ratio) {
+      feedContainer.style.setProperty('--aspect-ratio', this._config.aspect_ratio);
+    }
+    this._elements.feedContainer = feedContainer;
+
+    // Placeholder inside feed
+    const placeholder = document.createElement('div');
+    placeholder.className = 'placeholder';
+    const placeholderIcon = document.createElement('ha-icon');
+    placeholderIcon.setAttribute('icon', 'mdi:camera');
+    const placeholderText = document.createElement('span');
+    placeholderText.textContent = 'Awaiting Camera Stream...';
+    placeholder.appendChild(placeholderIcon);
+    placeholder.appendChild(placeholderText);
+    this._elements.placeholder = placeholder;
+    feedContainer.appendChild(placeholder);
+
+    // Image inside feed
     const imgEl = document.createElement('img');
     imgEl.alt = 'Camera Feed';
+    imgEl.onload = () => {
+      imgEl.classList.add('loaded');
+      placeholder.classList.add('hidden');
+    };
     this._elements.img = imgEl;
+    feedContainer.appendChild(imgEl);
 
-    this._elements.statusText = document.createTextNode('Connecting...');
-    const statusBar = document.createElement('div');
-    statusBar.appendChild(document.createTextNode('Status: '));
-    statusBar.appendChild(this._elements.statusText);
+    // Status dot and text overlay inside feed
+    const statusOverlay = document.createElement('div');
+    statusOverlay.className = 'status-overlay';
+    const statusDot = document.createElement('div');
+    statusDot.className = 'status-dot';
+    statusOverlay.appendChild(statusDot);
+    const statusTextSpan = document.createElement('span');
+    statusOverlay.appendChild(statusTextSpan);
+    this._elements.statusDot = statusDot;
+    this._elements.statusTextSpan = statusTextSpan;
+    feedContainer.appendChild(statusOverlay);
+
+    // Controls
+    const controls = document.createElement('div');
+    controls.className = 'controls';
 
     const unlockBtn = document.createElement('button');
-    unlockBtn.textContent = 'Unlock Door';
+    unlockBtn.className = 'btn btn-unlock';
+    const unlockIcon = document.createElement('ha-icon');
+    unlockIcon.setAttribute('icon', 'mdi:door-open');
+    unlockBtn.appendChild(unlockIcon);
+    unlockBtn.appendChild(document.createTextNode('Unlock'));
     unlockBtn.onclick = () => this._handleUnlock();
     this._elements.unlockBtn = unlockBtn;
+    controls.appendChild(unlockBtn);
 
     const switchBtn = document.createElement('button');
-    switchBtn.textContent = 'Switch Feed';
+    switchBtn.className = 'btn btn-switch';
+    const switchIcon = document.createElement('ha-icon');
+    switchIcon.setAttribute('icon', 'mdi:camera-switch');
+    switchBtn.appendChild(switchIcon);
+    switchBtn.appendChild(document.createTextNode('Switch'));
     switchBtn.onclick = () => this._handleSwitch();
     this._elements.switchBtn = switchBtn;
+    controls.appendChild(switchBtn);
 
     const hangupBtn = document.createElement('button');
+    hangupBtn.className = 'btn btn-decline';
+    const hangupIcon = document.createElement('ha-icon');
+    hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
+    const hangupSpan = document.createElement('span');
+    hangupSpan.textContent = 'Decline';
+    hangupBtn.appendChild(hangupIcon);
+    hangupBtn.appendChild(hangupSpan);
     hangupBtn.onclick = () => this._handleHangupCall();
     this._elements.hangupBtn = hangupBtn;
+    this._elements.hangupSpan = hangupSpan;
+    this._elements.hangupIcon = hangupIcon;
+    controls.appendChild(hangupBtn);
 
     const answerBtn = document.createElement('button');
-    answerBtn.textContent = 'Answer';
+    answerBtn.className = 'btn btn-answer';
+    const answerIcon = document.createElement('ha-icon');
+    answerIcon.setAttribute('icon', 'mdi:phone');
+    answerBtn.appendChild(answerIcon);
+    answerBtn.appendChild(document.createTextNode('Answer'));
     answerBtn.onclick = () => this._handleAnswerCall();
     this._elements.answerBtn = answerBtn;
-
-    const controls = document.createElement('div');
-    controls.appendChild(unlockBtn);
-    controls.appendChild(switchBtn);
-    controls.appendChild(hangupBtn);
     controls.appendChild(answerBtn);
 
     const extraDoors = document.createElement('div');
-    extraDoors.style.marginTop = '8px';
+    extraDoors.className = 'extra-doors hidden';
     this._elements.extraDoors = extraDoors;
 
     const card = document.createElement('ha-card');
-    card.appendChild(header);
-    card.appendChild(imgEl);
-    card.appendChild(statusBar);
+    card.appendChild(headerContainer);
+    card.appendChild(feedContainer);
     card.appendChild(controls);
     card.appendChild(extraDoors);
 
@@ -196,22 +488,31 @@ class TJA470IntercomCard extends HTMLElement {
     const caller = attr.caller || 'Unknown Caller';
 
     let statusText = 'Connecting...';
+    let statusClass = 'connecting';
     if (isOffline) {
       statusText = 'Offline';
+      statusClass = 'offline';
     } else {
       if (callState === 'ringing') {
-        statusText = `Incoming Call: ${caller}`;
+        statusText = `Call from: ${caller}`;
+        statusClass = 'ringing';
       } else if (callState === 'dialing') {
         statusText = `Calling ${caller}...`;
+        statusClass = 'connecting';
       } else if (callState === 'answered') {
         statusText = `Call Active: ${caller}`;
+        statusClass = 'ringing';
       } else {
         statusText = 'Connected';
+        statusClass = 'connected';
       }
     }
 
-    if (this._elements.statusText) {
-      this._elements.statusText.nodeValue = statusText;
+    if (this._elements.statusTextSpan) {
+      this._elements.statusTextSpan.textContent = statusText;
+    }
+    if (this._elements.statusDot) {
+      this._elements.statusDot.className = `status-dot ${statusClass}`;
     }
 
     const token = attr.access_token;
@@ -219,6 +520,8 @@ class TJA470IntercomCard extends HTMLElement {
     if (token && (this._currentToken !== token || this._currentEntityId !== entityId)) {
       this._currentToken = token;
       this._currentEntityId = entityId;
+      this._elements.img.classList.remove('loaded');
+      this._elements.placeholder.classList.remove('hidden');
       this._elements.img.src = `/api/camera_proxy_stream/${entityId}?token=${token}`;
     }
 
@@ -241,19 +544,22 @@ class TJA470IntercomCard extends HTMLElement {
       this._elements.switchBtn.classList.add('hidden');
       this._elements.unlockBtn.classList.add('hidden');
       this._elements.answerBtn.classList.remove('hidden');
-      this._elements.hangupBtn.textContent = 'Decline';
+      this._elements.hangupSpan.textContent = 'Decline';
+      this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else if (callState === 'dialing') {
       this._elements.switchBtn.classList.add('hidden');
       this._elements.unlockBtn.classList.remove('hidden');
       this._elements.answerBtn.classList.add('hidden');
-      this._elements.hangupBtn.textContent = 'Cancel';
+      this._elements.hangupSpan.textContent = 'Cancel';
+      this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else if (callState === 'answered') {
       this._elements.switchBtn.classList.add('hidden');
       this._elements.unlockBtn.classList.remove('hidden');
       this._elements.answerBtn.classList.add('hidden');
-      this._elements.hangupBtn.textContent = 'Hang Up';
+      this._elements.hangupSpan.textContent = 'Hang Up';
+      this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else {
       this._elements.switchBtn.classList.remove('hidden');
@@ -270,6 +576,12 @@ class TJA470IntercomCard extends HTMLElement {
     if (!extraDoorsContainer) return;
     const configuredDoors = (this._config && this._config.door_buttons) || this._discoveredDoorButtons || [];
 
+    if (configuredDoors.length === 0) {
+      extraDoorsContainer.classList.add('hidden');
+      return;
+    }
+
+    extraDoorsContainer.classList.remove('hidden');
     extraDoorsContainer.replaceChildren();
 
     configuredDoors.forEach(door => {
@@ -277,25 +589,37 @@ class TJA470IntercomCard extends HTMLElement {
       const doorName = door.name || entityId.split('.').pop().replace(/_/g, ' ');
 
       const row = document.createElement('div');
-      row.style.marginTop = '4px';
+      row.className = 'extra-door-row';
 
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = doorName + ': ';
+      nameSpan.className = 'extra-door-name';
+      nameSpan.textContent = doorName;
       row.appendChild(nameSpan);
+
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'extra-door-actions';
 
       if (door.sip_id) {
         const callBtn = document.createElement('button');
-        callBtn.textContent = 'Call';
+        callBtn.className = 'btn btn-switch btn-mini';
+        const callIcon = document.createElement('ha-icon');
+        callIcon.setAttribute('icon', 'mdi:phone');
+        callBtn.appendChild(callIcon);
+        callBtn.appendChild(document.createTextNode('Call'));
         callBtn.onclick = () => this._handleInitiateCallForSip(door.sip_id);
-        row.appendChild(callBtn);
-        row.appendChild(document.createTextNode(' '));
+        actionsDiv.appendChild(callBtn);
       }
 
       const unlockBtn = document.createElement('button');
-      unlockBtn.textContent = 'Unlock';
+      unlockBtn.className = 'btn btn-unlock btn-mini';
+      const unlockIcon = document.createElement('ha-icon');
+      unlockIcon.setAttribute('icon', 'mdi:door-open');
+      unlockBtn.appendChild(unlockIcon);
+      unlockBtn.appendChild(document.createTextNode('Unlock'));
       unlockBtn.onclick = () => this._handleMiniUnlock(entityId);
-      row.appendChild(unlockBtn);
+      actionsDiv.appendChild(unlockBtn);
 
+      row.appendChild(actionsDiv);
       extraDoorsContainer.appendChild(row);
     });
   }
