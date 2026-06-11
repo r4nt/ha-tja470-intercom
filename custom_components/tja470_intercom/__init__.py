@@ -176,7 +176,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
         if not resources.loaded:
             await resources.async_load()
 
-        url = "/tja470-intercom/tja470-intercom-card.js?v=1.0.9"
+        url = "/tja470-intercom/tja470-intercom-card.js?v=1.1.0"
 
         # Check if already registered
         for item in resources.async_items():
@@ -219,7 +219,7 @@ async def async_register_custom_panel(hass: HomeAssistant) -> None:
         webcomponent_name="tja470-intercom-panel",
         sidebar_title="Intercom",
         sidebar_icon="mdi:phone-in-talk",
-        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.0.9",
+        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.1.0",
         require_admin=False,
     )
 
