@@ -364,6 +364,10 @@ class TJA470IntercomCard extends HTMLElement {
         70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
         100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
       }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
     `;
     this.shadowRoot.appendChild(style);
 
@@ -429,7 +433,7 @@ class TJA470IntercomCard extends HTMLElement {
     unlockIcon.setAttribute('icon', 'mdi:door-open');
     unlockBtn.appendChild(unlockIcon);
     unlockBtn.appendChild(document.createTextNode('Unlock'));
-    unlockBtn.onclick = () => this._handleUnlock();
+    unlockBtn.onclick = () => this._handleUnlock(unlockBtn);
     this._elements.unlockBtn = unlockBtn;
     controls.appendChild(unlockBtn);
 
@@ -439,7 +443,7 @@ class TJA470IntercomCard extends HTMLElement {
     switchIcon.setAttribute('icon', 'mdi:camera-switch');
     switchBtn.appendChild(switchIcon);
     switchBtn.appendChild(document.createTextNode('Switch'));
-    switchBtn.onclick = () => this._handleSwitch();
+    switchBtn.onclick = () => this._handleSwitch(switchBtn);
     this._elements.switchBtn = switchBtn;
     controls.appendChild(switchBtn);
 
@@ -451,7 +455,7 @@ class TJA470IntercomCard extends HTMLElement {
     hangupSpan.textContent = 'Decline';
     hangupBtn.appendChild(hangupIcon);
     hangupBtn.appendChild(hangupSpan);
-    hangupBtn.onclick = () => this._handleHangupCall();
+    hangupBtn.onclick = () => this._handleHangupCall(hangupBtn);
     this._elements.hangupBtn = hangupBtn;
     this._elements.hangupSpan = hangupSpan;
     this._elements.hangupIcon = hangupIcon;
@@ -463,7 +467,7 @@ class TJA470IntercomCard extends HTMLElement {
     answerIcon.setAttribute('icon', 'mdi:phone');
     answerBtn.appendChild(answerIcon);
     answerBtn.appendChild(document.createTextNode('Answer'));
-    answerBtn.onclick = () => this._handleAnswerCall();
+    answerBtn.onclick = () => this._handleAnswerCall(answerBtn);
     this._elements.answerBtn = answerBtn;
     controls.appendChild(answerBtn);
 
@@ -542,28 +546,24 @@ class TJA470IntercomCard extends HTMLElement {
 
     if (callState === 'ringing') {
       this._elements.switchBtn.classList.add('hidden');
-      this._elements.unlockBtn.classList.add('hidden');
       this._elements.answerBtn.classList.remove('hidden');
       this._elements.hangupSpan.textContent = 'Decline';
       this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else if (callState === 'dialing') {
       this._elements.switchBtn.classList.add('hidden');
-      this._elements.unlockBtn.classList.remove('hidden');
       this._elements.answerBtn.classList.add('hidden');
       this._elements.hangupSpan.textContent = 'Cancel';
       this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else if (callState === 'answered') {
       this._elements.switchBtn.classList.add('hidden');
-      this._elements.unlockBtn.classList.remove('hidden');
       this._elements.answerBtn.classList.add('hidden');
       this._elements.hangupSpan.textContent = 'Hang Up';
       this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else {
       this._elements.switchBtn.classList.remove('hidden');
-      this._elements.unlockBtn.classList.remove('hidden');
       this._elements.answerBtn.classList.add('hidden');
       this._elements.hangupBtn.classList.add('hidden');
     }
@@ -580,6 +580,10 @@ class TJA470IntercomCard extends HTMLElement {
       extraDoorsContainer.classList.add('hidden');
       return;
     }
+
+    const doorsKey = JSON.stringify(configuredDoors);
+    if (this._renderedDoorsKey === doorsKey) return;
+    this._renderedDoorsKey = doorsKey;
 
     extraDoorsContainer.classList.remove('hidden');
     extraDoorsContainer.replaceChildren();
@@ -606,7 +610,7 @@ class TJA470IntercomCard extends HTMLElement {
         callIcon.setAttribute('icon', 'mdi:phone');
         callBtn.appendChild(callIcon);
         callBtn.appendChild(document.createTextNode('Call'));
-        callBtn.onclick = () => this._handleInitiateCallForSip(door.sip_id);
+        callBtn.onclick = () => this._handleInitiateCallForSip(callBtn, door.sip_id);
         actionsDiv.appendChild(callBtn);
       }
 
@@ -616,7 +620,7 @@ class TJA470IntercomCard extends HTMLElement {
       unlockIcon.setAttribute('icon', 'mdi:door-open');
       unlockBtn.appendChild(unlockIcon);
       unlockBtn.appendChild(document.createTextNode('Unlock'));
-      unlockBtn.onclick = () => this._handleMiniUnlock(entityId);
+      unlockBtn.onclick = () => this._handleMiniUnlock(unlockBtn, entityId);
       actionsDiv.appendChild(unlockBtn);
 
       row.appendChild(actionsDiv);
@@ -624,33 +628,76 @@ class TJA470IntercomCard extends HTMLElement {
     });
   }
 
-  _handleUnlock() {
+  async _runActionButton(buttonEl, serviceCallPromise) {
+    if (!buttonEl || buttonEl.classList.contains('loading')) return;
+
+    const iconEl = buttonEl.querySelector('ha-icon');
+    const originalIcon = iconEl ? iconEl.getAttribute('icon') : null;
+    buttonEl.classList.add('loading');
+    buttonEl.disabled = true;
+
+    if (iconEl) {
+      iconEl.setAttribute('icon', 'mdi:loading');
+      iconEl.style.animation = 'spin 1s linear infinite';
+    }
+    
+    const minTimePromise = new Promise(resolve => setTimeout(resolve, 600));
+    try {
+      await Promise.all([serviceCallPromise, minTimePromise]);
+    } catch (err) {
+      console.error("Action failed:", err);
+    } finally {
+      buttonEl.classList.remove('loading');
+      buttonEl.disabled = false;
+      if (iconEl && originalIcon) {
+        iconEl.setAttribute('icon', originalIcon);
+        iconEl.style.animation = '';
+      }
+    }
+  }
+
+  _handleUnlock(buttonEl) {
     const entityId = this._resolvedEntityId || this._config.entity;
     const openActiveDoorBtn = this._config.open_door_button || 
       entityId.replace(/_camera$/, '_open_active_door').replace(/^camera\./, 'button.');
-    this._hass.callService('button', 'press', { entity_id: openActiveDoorBtn });
+    this._runActionButton(
+      buttonEl,
+      this._hass.callService('button', 'press', { entity_id: openActiveDoorBtn })
+    );
   }
 
-  _handleMiniUnlock(entityId) {
-    this._hass.callService('button', 'press', { entity_id: entityId });
+  _handleMiniUnlock(buttonEl, entityId) {
+    this._runActionButton(
+      buttonEl,
+      this._hass.callService('button', 'press', { entity_id: entityId })
+    );
   }
 
-  _handleAnswerCall() {
+  _handleAnswerCall(buttonEl) {
     const entityId = this._resolvedEntityId || this._config.entity;
-    this._hass.callService('tja470_intercom', 'answer_call', { entity_id: entityId });
+    this._runActionButton(
+      buttonEl,
+      this._hass.callService('tja470_intercom', 'answer_call', { entity_id: entityId })
+    );
   }
 
-  _handleHangupCall() {
+  _handleHangupCall(buttonEl) {
     const entityId = this._resolvedEntityId || this._config.entity;
-    this._hass.callService('tja470_intercom', 'hangup_call', { entity_id: entityId });
+    this._runActionButton(
+      buttonEl,
+      this._hass.callService('tja470_intercom', 'hangup_call', { entity_id: entityId })
+    );
   }
 
-  _handleInitiateCallForSip(sipId) {
+  _handleInitiateCallForSip(buttonEl, sipId) {
     const entityId = this._resolvedEntityId || this._config.entity;
-    this._hass.callService('tja470_intercom', 'initiate_call', {
-      entity_id: entityId,
-      number: sipId
-    });
+    this._runActionButton(
+      buttonEl,
+      this._hass.callService('tja470_intercom', 'initiate_call', {
+        entity_id: entityId,
+        number: sipId
+      })
+    );
   }
 
   async _startCallAudio(entryId) {
@@ -760,12 +807,15 @@ class TJA470IntercomCard extends HTMLElement {
     }
   }
 
-  _handleSwitch() {
+  _handleSwitch(buttonEl) {
     const entityId = this._resolvedEntityId || this._config.entity;
     const switchBtn = this._config.switch_camera_button || 
       entityId.replace(/_camera$/, '_switch_camera').replace(/^camera\./, 'button.');
     this._currentToken = null;
-    this._hass.callService('button', 'press', { entity_id: switchBtn });
+    this._runActionButton(
+      buttonEl,
+      this._hass.callService('button', 'press', { entity_id: switchBtn })
+    );
   }
 }
 
