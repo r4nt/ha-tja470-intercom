@@ -1,21 +1,107 @@
-# ha-tja470-intercom
+# Hager TJA470 Intercom — Home Assistant Integration
 
-Draft:
-Home assistant integration for TJA470 intercom.
-This uses the aiotja470-intercom package.
-Must pass highest home assistant guidelines.
-Config flow:
-Ask user for IP / user / password with explanation on how to set that up on the tja470 web interface.
-Read free devices. If there are no free devices, guide the user through how to add one in the tja470 web interface.
-If there is a free device, generate a uuid and connect to it. Read the provisioning info and remember:
-- all endpoints and their number
-- endpoints names, including sip addresses
+> **Disclaimer:** This is an unofficial, community-developed integration. It is not affiliated with, endorsed by, or supported by Hager Group in any way. Use at your own risk.
 
-Create devices for the doors/gates that are connected to the tja470 intercom.
-Provide services to open the doors / gates, either for the currently active door/gate (will change when the bell rings), or with a number (using the respective API).
-Provide service to swtich the camera.
+A custom integration for the **Hager TJA470 IP intercom** that brings live video, door control, and call handling directly into Home Assistant.
 
-Make sure to store all information that is necessary to re-connect, i.e. the uuid etc, and manage the auth cookie.
-Allow users to look up the provisioning data including the sip auth info on the integration.
+## Features
 
-Open question: best way to make it into an actual intercom with UX, and how to connect all of this in a way that video/audio works when the user is not in the home network.
+- **Live camera stream** — the intercom's video feed appears as a standard HA camera entity
+- **Door release buttons** — one button per connected door station, plus an "Open Active Door" button that releases whichever door is currently on screen
+- **Camera switching** — cycle through connected door stations
+- **Call state tracking** — the camera entity reflects the current call state (`idle`, `ringing`, `dialing`, `answered`) and the caller ID
+- **SIP call control** — answer, decline, hang up, or initiate outgoing calls via HA services
+- **Push notifications** — incoming calls trigger a push notification to configured Home Assistant companion app devices
+- **Dedicated dashboard panel** — an "Intercom" entry appears in the HA sidebar with a purpose-built card showing the live feed, call controls, and door release buttons for all stations
+- **Custom Lovelace card** — `tja470-intercom-card` can be added to any dashboard
+
+## Prerequisites
+
+### TJA470 web interface — create a free device slot
+
+The TJA470 authenticates connected clients using pairing slots. Before setting up the integration you need to make sure at least one slot is free:
+
+1. Open the TJA470 web interface (browse to the intercom's IP address)
+2. Log in with your administrator credentials
+3. Navigate to **Settings → Mobile devices** (or similar, depending on firmware)
+4. If all slots are occupied, delete one to free it up
+
+The integration will claim that slot during setup and store the credentials automatically.
+
+## Installation
+
+### Via HACS (recommended)
+
+1. Open HACS in Home Assistant
+2. Go to **Integrations** and click the menu in the top-right corner → **Custom repositories**
+3. Add this repository URL and select category **Integration**
+4. Search for "Hager TJA470 Intercom" and install it
+5. Restart Home Assistant
+
+### Manual
+
+Copy the `custom_components/tja470_intercom` directory into your HA `config/custom_components/` folder and restart.
+
+## Setup
+
+1. Go to **Settings → Integrations → Add Integration**
+2. Search for **Hager TJA470 Intercom**
+3. Enter the intercom's IP address, your admin username, and password
+4. Select a free device slot to pair with — the integration registers itself as a mobile client using that slot
+5. Click **Submit** — HA will create all entities and the sidebar panel immediately
+
+## Entities
+
+| Entity | Type | Description |
+| :--- | :--- | :--- |
+| `camera.tja470_intercom_…_camera` | Camera | Live MJPEG/RTSP stream |
+| `button.tja470_intercom_…_open_active_door` | Button | Release the currently active door |
+| `button.tja470_intercom_…_switch_camera` | Button | Cycle to the next camera position |
+| `button.<door_name>_open` | Button | Release a specific door station (one per station) |
+| `sensor.…_sip_registrar` | Sensor (diagnostic) | IP address used as SIP registrar |
+| `sensor.…_rtsp_stream_url` | Sensor (diagnostic) | Full RTSP stream URL |
+| `sensor.…_sip_registration_status` | Sensor (diagnostic) | SIP registration state |
+
+## Services
+
+| Service | Description |
+| :--- | :--- |
+| `tja470_intercom.open_door` | Release a door by ID |
+| `tja470_intercom.open_door_at_position` | Switch camera to a position index and release the door |
+| `tja470_intercom.switch_camera` | Cycle to the next camera, or jump to a specific position |
+| `tja470_intercom.answer_call` | Answer the current incoming call |
+| `tja470_intercom.hangup_call` | Hang up or decline the current call |
+| `tja470_intercom.initiate_call` | Dial a SIP extension (e.g. a door station) |
+| `tja470_intercom.get_sip_credentials` | Return SIP credentials for use in an external SIP client |
+| `tja470_intercom.trigger_incoming_ring` | Simulate an incoming call (testing/automation development) |
+
+## Push notifications
+
+You can configure the integration to send a push notification to one or more Home Assistant companion app devices whenever the doorbell rings:
+
+1. Go to **Settings → Integrations → Hager TJA470 Intercom → Configure**
+2. Select the mobile devices to notify — the list is auto-populated from installed companion apps and sorted by most recently seen
+
+## Lovelace card
+
+The card is registered automatically. To add it to a dashboard manually:
+
+```yaml
+type: custom:tja470-intercom-card
+```
+
+Optional configuration:
+
+```yaml
+type: custom:tja470-intercom-card
+name: Front Door          # Override the title (default: entity friendly name)
+aspect_ratio: "16 / 9"   # Override the video feed aspect ratio (default: 4 / 3)
+door_buttons:             # Manually specify extra door stations
+  - entity: button.front_gate_open
+    name: Front Gate
+  - entity: button.back_door_open
+    name: Back Door
+    sip_id: "4001"        # Enable a "Call" button for this station
+```
+
+If `door_buttons` is not set the card auto-discovers connected door stations from the entity registry.
