@@ -13,7 +13,7 @@ from homeassistant.components.ffmpeg import async_get_image
 from homeassistant.const import CONF_HOST
 
 from .const import DOMAIN
-from . import TJA470Coordinator
+from .coordinator import TJA470Coordinator
 
 
 async def async_setup_entry(
@@ -22,8 +22,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the camera platform for TJA470."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: TJA470Coordinator = data["coordinator"]
+    coordinator: TJA470Coordinator = entry.runtime_data.coordinator
 
     async_add_entities([TJA470Camera(coordinator)])
 
@@ -122,7 +121,10 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
             )
 
         # Include active call state
-        active_call = self.hass.data[DOMAIN][self.coordinator.entry.entry_id].get("active_call")
+        try:
+            active_call = self.coordinator.entry.runtime_data.active_call
+        except AttributeError:
+            active_call = None
         if active_call:
             from pyVoIP.VoIP import CallState
             if active_call.state == CallState.ANSWERED:

@@ -172,3 +172,65 @@ async def test_flow_cannot_connect(hass: HomeAssistant) -> None:
         )
         assert result2["type"] == data_entry_flow.FlowResultType.FORM
         assert result2["errors"] == {"base": "cannot_connect"}
+
+
+async def test_flow_free_device_pairing_error(hass: HomeAssistant) -> None:
+    """Test error shown when pairing in async_step_free_device fails."""
+    mock_client = MagicMock()
+    mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
+    mock_client.get_free_devices = AsyncMock(
+        return_value=[FreeDevice(id=1, name="Slot 1", mac="AA:BB:CC:DD:EE:FF")]
+    )
+    mock_client.set_uid = AsyncMock(side_effect=TJA470Error("Pairing failed"))
+    mock_client.get_cookies = MagicMock(return_value={})
+
+    with patch(
+        "custom_components.tja470_intercom.config_flow.TJA470IntercomClient",
+        return_value=mock_client,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "192.168.42.2", CONF_USERNAME: "manuel", CONF_PASSWORD: "pwd"},
+        )
+        assert result2["step_id"] == "free_device"
+
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {"device_id": 1},
+        )
+        assert result3["type"] == data_entry_flow.FlowResultType.FORM
+        assert result3["step_id"] == "free_device"
+        assert result3["errors"] == {"base": "unknown"}
+
+
+async def test_flow_no_devices_still_no_devices(hass: HomeAssistant) -> None:
+    """Test that retrying no_devices step shows error when still no slots available."""
+    mock_client = MagicMock()
+    mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
+    mock_client.get_free_devices = AsyncMock(return_value=[])
+    mock_client.get_cookies = MagicMock(return_value={})
+
+    with patch(
+        "custom_components.tja470_intercom.config_flow.TJA470IntercomClient",
+        return_value=mock_client,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "192.168.42.2", CONF_USERNAME: "manuel", CONF_PASSWORD: "pwd"},
+        )
+        assert result2["step_id"] == "no_devices"
+
+        # Retry but still no devices available
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {},
+        )
+        assert result3["type"] == data_entry_flow.FlowResultType.FORM
+        assert result3["step_id"] == "no_devices"
+        assert result3["errors"] == {"base": "cannot_connect"}

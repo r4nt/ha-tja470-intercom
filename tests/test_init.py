@@ -51,11 +51,12 @@ async def test_setup_unload_entry(hass: HomeAssistant) -> None:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        assert entry.entry_id in hass.data[DOMAIN]
+        from homeassistant.config_entries import ConfigEntryState
+        assert entry.state == ConfigEntryState.LOADED
 
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
-        assert entry.entry_id not in hass.data[DOMAIN]
+        assert entry.state == ConfigEntryState.NOT_LOADED
 
 
 async def test_services(hass: HomeAssistant) -> None:
@@ -182,7 +183,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     # Verify the item is created
     mock_resources.async_create_item.assert_called_once_with({
         "res_type": "module",
-        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.1.2",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.1.9",
     })
 
     # Test case 2: hass.is_running is False -> registers after EVENT_HOMEASSISTANT_STARTED
@@ -203,7 +204,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     # Now it should be registered
     mock_resources.async_create_item.assert_called_once_with({
         "res_type": "module",
-        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.1.2",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.1.9",
     })
 
     # Test case 3: updating resource when version is different
@@ -221,7 +222,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     mock_resources.async_create_item.assert_not_called()
     mock_resources.async_update_item.assert_called_once_with(
         "card_id",
-        {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.1.2"}
+        {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.1.9"}
     )
 
 
@@ -242,7 +243,7 @@ async def test_custom_panel_registration(hass: HomeAssistant) -> None:
             webcomponent_name="tja470-intercom-panel",
             sidebar_title="Intercom",
             sidebar_icon="mdi:phone-in-talk",
-            module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.1.2",
+            module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.1.9",
             require_admin=False,
         )
 
@@ -297,7 +298,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
             blocking=True,
         )
         
-        active_call = hass.data[DOMAIN][entry.entry_id]["active_call"]
+        active_call = entry.runtime_data.active_call
         assert active_call is not None
         assert active_call.caller == "6001"
         assert active_call.is_outgoing is False
@@ -328,7 +329,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
             {},
             blocking=True,
         )
-        assert hass.data[DOMAIN][entry.entry_id]["active_call"] is None
+        assert entry.runtime_data.active_call is None
         camera_state = hass.states.get(camera_entity_ids[0])
         assert camera_state.attributes["call_state"] == "idle"
 
@@ -347,7 +348,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
             blocking=True,
         )
 
-        active_call = hass.data[DOMAIN][entry.entry_id]["active_call"]
+        active_call = entry.runtime_data.active_call
         assert active_call is not None
         assert active_call.caller == "6002"
         assert active_call.is_outgoing is True
@@ -373,7 +374,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
         # The previous call should have been hung up
         mock_outgoing_call.hangup.assert_called_once()
 
-        active_call = hass.data[DOMAIN][entry.entry_id]["active_call"]
+        active_call = entry.runtime_data.active_call
         assert active_call is not None
         assert active_call.caller == "6003"
 
@@ -384,7 +385,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
             {},
             blocking=True,
         )
-        assert hass.data[DOMAIN][entry.entry_id]["active_call"] is None
+        assert entry.runtime_data.active_call is None
         camera_state = hass.states.get(camera_entity_ids[0])
         assert camera_state.attributes["call_state"] == "idle"
 

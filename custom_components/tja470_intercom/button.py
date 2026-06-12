@@ -12,7 +12,7 @@ from aiotja470_intercom import TJA470IntercomClient
 from aiotja470_intercom.models import CalledElement
 
 from .const import CONF_UUID, DOMAIN
-from . import TJA470Coordinator
+from .coordinator import TJA470Coordinator
 
 
 async def async_setup_entry(
@@ -21,9 +21,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the button platform for TJA470."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    client: TJA470IntercomClient = data["client"]
-    coordinator: TJA470Coordinator = data["coordinator"]
+    client: TJA470IntercomClient = entry.runtime_data.client
+    coordinator: TJA470Coordinator = entry.runtime_data.coordinator
 
     entities: list[ButtonEntity] = []
 

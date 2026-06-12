@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from . import TJA470Coordinator
+from .coordinator import TJA470Coordinator
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -58,8 +58,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform for TJA470."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: TJA470Coordinator = data["coordinator"]
+    coordinator: TJA470Coordinator = entry.runtime_data.coordinator
 
     async_add_entities(
         TJA470Sensor(coordinator, description) for description in SENSOR_DESCRIPTIONS

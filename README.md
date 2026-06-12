@@ -107,3 +107,10 @@ door_buttons:             # Manually specify extra door stations
 ```
 
 If `door_buttons` is not set the card auto-discovers connected door stations from the entity registry.
+
+## Removal
+
+1. Go to **Settings → Integrations**, find **Hager TJA470 Intercom**, click the three-dot menu → **Delete**
+2. Restart Home Assistant
+3. If you installed via HACS: open HACS → Integrations, find the integration, and click **Remove**
+   If you installed manually: delete the `custom_components/tja470_intercom` folder from your HA config directory
