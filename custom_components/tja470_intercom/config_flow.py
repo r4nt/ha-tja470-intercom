@@ -6,9 +6,9 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import (
@@ -38,7 +38,7 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
 
@@ -89,7 +89,7 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_no_devices(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle step when no free devices are available."""
         errors: dict[str, str] = {}
 
@@ -124,7 +124,7 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_free_device(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle pairing with a selected free device slot."""
         errors: dict[str, str] = {}
 
@@ -178,9 +178,9 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Allow reconfiguring host and credentials."""
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -228,21 +228,19 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle reauthentication when credentials become invalid."""
-        self._reauth_entry = self.hass.config_entries.async_get_entry(
-            self.context["entry_id"]
-        )
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Confirm new credentials during reauth."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            host = self._reauth_entry.data[CONF_HOST]
+            reauth_entry = self._get_reauth_entry()
+            host = reauth_entry.data[CONF_HOST]
             session = async_get_clientsession(self.hass)
             runner = AiohttpRunner(session)
             client = TJA470IntercomClient(
@@ -260,7 +258,7 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 return self.async_update_reload_and_abort(
-                    self._reauth_entry,
+                    reauth_entry,
                     data_updates={
                         CONF_USERNAME: user_input[CONF_USERNAME],
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
@@ -297,7 +295,7 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             if "notify_devices_text" in user_input:
@@ -357,8 +355,8 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
 
         # Sort the mobile devices by most recent last seen date
         from datetime import datetime, timezone
-        def sort_key(item):
-            dt = item[1]["last_seen_dt"]
+        def sort_key(item: tuple[str, dict[str, Any]]) -> datetime:
+            dt: datetime | None = item[1]["last_seen_dt"]
             if dt is None:
                 return datetime.min.replace(tzinfo=timezone.utc)
             if dt.tzinfo is None:
@@ -375,7 +373,7 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
         ]
 
         # Build schema using only the notify.mobile_app_... targets
-        schema = {}
+        schema: dict[Any, Any] = {}
         if mobile_devices:
             schema[
                 vol.Optional(

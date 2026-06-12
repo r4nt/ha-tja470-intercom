@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.ffmpeg import async_get_image
@@ -86,7 +86,7 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
 
         host = self.coordinator.entry.data[CONF_HOST]
         # Replace ${ipadress} placeholder with actual host IP
-        return prov.rtsp_video_url.replace("${ipadress}", host)
+        return str(prov.rtsp_video_url.replace("${ipadress}", host))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

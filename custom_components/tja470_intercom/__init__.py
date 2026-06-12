@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import voluptuous as vol
 from aiohttp import web
 
-from homeassistant.components.http import HomeAssistantView
+from homeassistant.helpers.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
@@ -55,7 +56,7 @@ class TJA470AudioStreamView(HomeAssistantView):
     name = "api:tja470_intercom:audio_stream"
     requires_auth = False
 
-    async def get(self, request: web.Request) -> web.WebSocketResponse:
+    async def get(self, request: web.Request) -> web.StreamResponse:
         """Handle websocket connection."""
         hass = request.app["hass"]
         entry_id = request.query.get("entry_id")
@@ -85,7 +86,7 @@ class TJA470AudioStreamView(HomeAssistantView):
 
         LOGGER.info("Websocket audio stream connected for call: %s", active_call)
 
-        async def send_audio():
+        async def send_audio() -> None:
             from pyVoIP.VoIP import CallState
             try:
                 while active_call.state in (CallState.RINGING, CallState.DIALING):
@@ -100,7 +101,7 @@ class TJA470AudioStreamView(HomeAssistantView):
             except Exception as e:
                 LOGGER.error("Error sending audio to websocket: %s", e)
 
-        async def receive_audio():
+        async def receive_audio() -> None:
             try:
                 async for msg in ws:
                     if msg.type == web.WSMsgType.BINARY:
@@ -124,11 +125,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         if entry is None or entry.domain != DOMAIN:
             return None
         try:
-            return entry.runtime_data
+            return cast(TJA470RuntimeData, entry.runtime_data)
         except AttributeError:
             return None
 
-    async def _resolve_entry_ids(call_data: dict) -> list[str]:
+    async def _resolve_entry_ids(call_data: dict[str, Any]) -> list[str]:
         device_ids = call_data.get("device_id", [])
         entity_ids = call_data.get("entity_id", [])
         entry_ids: list[str] = []
@@ -319,11 +320,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     LOGGER.debug("Failed to hang up previous call: %s", e)
 
             class PlaceholderCall:
-                def __init__(self, caller_id):
+                def __init__(self, caller_id: str) -> None:
                     self.caller = caller_id
                     self.state = CallState.DIALING
                     self.is_outgoing = True
-                async def hangup(self):
+                async def hangup(self) -> None:
                     self.state = CallState.ENDED
 
             placeholder = PlaceholderCall(number)
@@ -380,24 +381,24 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 continue
 
             class MockSipCall:
-                def __init__(self, caller_id):
+                def __init__(self, caller_id: str) -> None:
                     self.caller = caller_id
                     self.state = CallState.RINGING
                     self.is_outgoing = False
-                async def answer(self):
+                async def answer(self) -> None:
                     self.state = CallState.ANSWERED
                     LOGGER.info("Mock call answered")
-                async def hangup(self):
+                async def hangup(self) -> None:
                     self.state = CallState.ENDED
                     LOGGER.info("Mock call hung up")
-                async def deny(self):
+                async def deny(self) -> None:
                     self.state = CallState.ENDED
                     LOGGER.info("Mock call denied")
-                async def audio_stream(self, frame_size=320, convert_16bit=True):
+                async def audio_stream(self, frame_size: int = 320, convert_16bit: bool = True) -> AsyncGenerator[bytes, None]:
                     while self.state == CallState.ANSWERED:
                         yield b"\x00" * frame_size
                         await asyncio.sleep(frame_size / 16000.0)
-                async def write_audio_16bit(self, data):
+                async def write_audio_16bit(self, data: bytes) -> None:
                     pass
 
             mock_call = MockSipCall(caller)
@@ -491,7 +492,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
             StaticPathConfig("/tja470-intercom", www_dir, False)
         ])
 
-    async def async_register(event=None) -> None:
+    async def async_register(event: Any = None) -> None:
         if "lovelace" not in hass.data:
             return
         lovelace = hass.data["lovelace"]
@@ -619,7 +620,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         hass.async_create_task(monitor_call())
 
-    async def handle_registration_state(state) -> None:
+    async def handle_registration_state(state: Any) -> None:
         LOGGER.info("SIP registration state changed: %s", state)
         from homeassistant.helpers.dispatcher import async_dispatcher_send
         async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")

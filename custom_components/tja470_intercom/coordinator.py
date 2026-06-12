@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -14,7 +15,7 @@ from aiotja470_intercom.exceptions import TJA470AuthError, TJA470Error
 from .const import CONF_COOKIES, CONF_UUID, DOMAIN, LOGGER
 
 
-class TJA470Coordinator(DataUpdateCoordinator[dict]):
+class TJA470Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator for TJA470 data updates."""
 
     def __init__(
@@ -33,7 +34,7 @@ class TJA470Coordinator(DataUpdateCoordinator[dict]):
         self.client = client
         self.entry = entry
 
-    async def _async_update_data(self) -> dict:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from TJA470 Intercom."""
         uuid_str = self.entry.data[CONF_UUID]
         try:

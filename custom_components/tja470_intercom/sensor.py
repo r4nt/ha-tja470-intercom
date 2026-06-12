@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -22,7 +23,7 @@ PARALLEL_UPDATES = 0
 class TJA470SensorEntityDescription(SensorEntityDescription):
     """Class describing TJA470 sensor entities."""
 
-    value_fn: Callable[[dict, ConfigEntry], str | None]
+    value_fn: Callable[[dict[str, Any], ConfigEntry], str | None]
 
 
 SENSOR_DESCRIPTIONS: tuple[TJA470SensorEntityDescription, ...] = (
