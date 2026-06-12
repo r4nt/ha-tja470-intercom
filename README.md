@@ -19,16 +19,16 @@ A custom integration for the **Hager TJA470 IP intercom** that brings live video
 
 ## Prerequisites
 
-### TJA470 web interface — create a free device slot
+### TJA470 web interface — create a local user with a free device slot
 
-The TJA470 authenticates connected clients using pairing slots. Before setting up the integration you need to make sure at least one slot is free:
+The TJA470 authenticates connected clients using named local users, each of which has pairing slots for mobile devices. Before setting up the integration you need a local user with at least one free slot:
 
 1. Open the TJA470 web interface (browse to the intercom's IP address)
 2. Log in with your administrator credentials
-3. Navigate to **Settings → Mobile devices** (or similar, depending on firmware)
-4. If all slots are occupied, delete one to free it up
+3. Create a local user (or use an existing one) — this is the user the integration will authenticate as
+4. Ensure that user has at least one free device slot; if all slots are occupied, delete one to free it up
 
-The integration will claim that slot during setup and store the credentials automatically.
+The integration will claim that slot during setup and store the pairing credentials automatically.
 
 ## Installation
 
@@ -48,9 +48,17 @@ Copy the `custom_components/tja470_intercom` directory into your HA `config/cust
 
 1. Go to **Settings → Integrations → Add Integration**
 2. Search for **Hager TJA470 Intercom**
-3. Enter the intercom's IP address, your admin username, and password
+3. Enter the intercom's IP address and the credentials of the local user you created
 4. Select a free device slot to pair with — the integration registers itself as a mobile client using that slot
 5. Click **Submit** — HA will create all entities and the sidebar panel immediately
+
+### Installation parameters
+
+| Parameter | Description |
+| :--- | :--- |
+| **IP Address or Hostname** | The local IP address or hostname of the TJA470 (e.g. `192.168.1.50`) |
+| **Username** | Username of the local TJA470 user created for this integration |
+| **Password** | Password of that local user |
 
 ## Entities
 
@@ -83,6 +91,12 @@ You can configure the integration to send a push notification to one or more Hom
 
 1. Go to **Settings → Integrations → Hager TJA470 Intercom → Configure**
 2. Select the mobile devices to notify — the list is auto-populated from installed companion apps and sorted by most recently seen
+
+### Configuration parameters
+
+| Parameter | Description |
+| :--- | :--- |
+| **Devices to notify** | One or more HA companion app devices that receive a push notification on incoming calls |
 
 ## Lovelace card
 

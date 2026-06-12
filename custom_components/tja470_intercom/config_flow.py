@@ -169,6 +169,58 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reauth(
+        self, entry_data: dict[str, Any]
+    ) -> FlowResult:
+        """Handle reauthentication when credentials become invalid."""
+        self._reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Confirm new credentials during reauth."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            host = self._reauth_entry.data[CONF_HOST]
+            session = async_get_clientsession(self.hass)
+            runner = AiohttpRunner(session)
+            client = TJA470IntercomClient(
+                host, user_input[CONF_USERNAME], user_input[CONF_PASSWORD], runner
+            )
+            try:
+                await client.get_manifest()
+            except TJA470AuthError:
+                errors["base"] = "invalid_auth"
+            except TJA470ConnectionError:
+                errors["base"] = "cannot_connect"
+            except TJA470Error as err:
+                LOGGER.error("Unexpected error during reauth: %s", err)
+                errors["base"] = "unknown"
+
+            if not errors:
+                return self.async_update_reload_and_abort(
+                    self._reauth_entry,
+                    data_updates={
+                        CONF_USERNAME: user_input[CONF_USERNAME],
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(

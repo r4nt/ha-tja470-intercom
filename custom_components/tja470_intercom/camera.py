@@ -15,6 +15,8 @@ from homeassistant.const import CONF_HOST
 from .const import DOMAIN
 from .coordinator import TJA470Coordinator
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

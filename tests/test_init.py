@@ -4,10 +4,12 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.tja470_intercom.const import CONF_UUID, CONF_COOKIES, DOMAIN
+from aiotja470_intercom.exceptions import TJA470Error
 from aiotja470_intercom.models import ProvisioningInfo, Manifest, SipInfo, CalledElement
 
 pytestmark = pytest.mark.asyncio
@@ -51,7 +53,6 @@ async def test_setup_unload_entry(hass: HomeAssistant) -> None:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        from homeassistant.config_entries import ConfigEntryState
         assert entry.state == ConfigEntryState.LOADED
 
         assert await hass.config_entries.async_unload(entry.entry_id)
@@ -577,8 +578,54 @@ async def test_incoming_call_notification(hass: HomeAssistant, mock_sip_phone) -
             }
 
 
+async def test_coordinator_update_failure_makes_entities_unavailable(
+    hass: HomeAssistant,
+) -> None:
+    """Test that a coordinator update failure marks entities as unavailable."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "host": "192.168.42.2",
+            "username": "manuel",
+            "password": "pwd",
+            CONF_UUID: "some-uuid",
+        },
+    )
+    entry.add_to_hass(hass)
 
+    mock_client = MagicMock()
+    mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
+    mock_client.get_provisioning = AsyncMock(
+        return_value=ProvisioningInfo(
+            sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
+            rtsp_video_url="rtsp://some_url",
+            http_video_url="http://some_http_url",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
+        )
+    )
+    mock_client.get_cookies = MagicMock(return_value={})
 
+    with patch(
+        "custom_components.tja470_intercom.TJA470IntercomClient",
+        return_value=mock_client,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        # Entities are available after initial setup
+        camera_ids = hass.states.async_entity_ids("camera")
+        assert len(camera_ids) > 0
+        assert hass.states.get(camera_ids[0]).state != "unavailable"
+
+        # Simulate coordinator update failure
+        mock_client.get_provisioning = AsyncMock(side_effect=TJA470Error("Device offline"))
+        coordinator = entry.runtime_data.coordinator
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+
+        # Entities should now be unavailable
+        assert hass.states.get(camera_ids[0]).state == "unavailable"
 
 
 

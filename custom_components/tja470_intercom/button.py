@@ -14,6 +14,8 @@ from aiotja470_intercom.models import CalledElement
 from .const import CONF_UUID, DOMAIN
 from .coordinator import TJA470Coordinator
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

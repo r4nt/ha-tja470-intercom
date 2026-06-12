@@ -20,6 +20,14 @@
         "data": {
           "device_id": "Device Slot"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Hager TJA470 Intercom",
+        "description": "Your credentials for the Hager TJA470 Intercom are no longer valid. Please enter new credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {

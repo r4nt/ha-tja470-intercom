@@ -12,7 +12,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
@@ -165,7 +165,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         door_id = call.data.get("door_id", 1)
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise HomeAssistantError("No TJA470 integration clients found")
+            raise ServiceValidationError("No TJA470 integration clients found")
         for cli in clients:
             try:
                 await cli.open_door(door_id=door_id)
@@ -179,7 +179,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         max_attempts = call.data.get("max_attempts", 10)
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise HomeAssistantError("No TJA470 integration clients found")
+            raise ServiceValidationError("No TJA470 integration clients found")
         for cli in clients:
             client_uuid = None
             for entry in hass.config_entries.async_entries(DOMAIN):
@@ -206,7 +206,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         max_attempts = call.data.get("max_attempts", 10)
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise HomeAssistantError("No TJA470 integration clients found")
+            raise ServiceValidationError("No TJA470 integration clients found")
         for cli in clients:
             client_uuid = None
             for entry in hass.config_entries.async_entries(DOMAIN):
@@ -232,7 +232,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         device_ids = call.data.get("device_id", [])
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise HomeAssistantError("No TJA470 integration clients found")
+            raise ServiceValidationError("No TJA470 integration clients found")
         cli = clients[0]
         coordinator = None
         for entry in hass.config_entries.async_entries(DOMAIN):

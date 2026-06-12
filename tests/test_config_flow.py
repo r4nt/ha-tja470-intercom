@@ -7,6 +7,7 @@ import pytest
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.tja470_intercom.const import CONF_COOKIES, CONF_UUID, DOMAIN
 from aiotja470_intercom.exceptions import TJA470AuthError, TJA470ConnectionError, TJA470Error
@@ -234,3 +235,79 @@ async def test_flow_no_devices_still_no_devices(hass: HomeAssistant) -> None:
         assert result3["type"] == data_entry_flow.FlowResultType.FORM
         assert result3["step_id"] == "no_devices"
         assert result3["errors"] == {"base": "cannot_connect"}
+
+
+async def test_reauth_flow_success(hass: HomeAssistant) -> None:
+    """Test successful reauthentication updates credentials and reloads entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "192.168.42.2",
+            CONF_USERNAME: "old_user",
+            CONF_PASSWORD: "old_pwd",
+            "uuid": "some-uuid",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    mock_client = MagicMock()
+    mock_client.get_manifest = AsyncMock(return_value=None)
+
+    with patch(
+        "custom_components.tja470_intercom.config_flow.TJA470IntercomClient",
+        return_value=mock_client,
+    ), patch(
+        "custom_components.tja470_intercom.async_setup_entry",
+        return_value=True,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        assert result["type"] == data_entry_flow.FlowResultType.FORM
+        assert result["step_id"] == "reauth_confirm"
+
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "new_user", CONF_PASSWORD: "new_pwd"},
+        )
+        assert result2["type"] == data_entry_flow.FlowResultType.ABORT
+        assert result2["reason"] == "reauth_successful"
+
+    assert entry.data[CONF_USERNAME] == "new_user"
+    assert entry.data[CONF_PASSWORD] == "new_pwd"
+
+
+async def test_reauth_flow_invalid_auth(hass: HomeAssistant) -> None:
+    """Test reauthentication shows error on bad credentials."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "192.168.42.2",
+            CONF_USERNAME: "old_user",
+            CONF_PASSWORD: "old_pwd",
+            "uuid": "some-uuid",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    mock_client = MagicMock()
+    mock_client.get_manifest = AsyncMock(side_effect=TJA470AuthError("Bad credentials"))
+
+    with patch(
+        "custom_components.tja470_intercom.config_flow.TJA470IntercomClient",
+        return_value=mock_client,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "bad_user", CONF_PASSWORD: "bad_pwd"},
+        )
+        assert result2["type"] == data_entry_flow.FlowResultType.FORM
+        assert result2["step_id"] == "reauth_confirm"
+        assert result2["errors"] == {"base": "invalid_auth"}
