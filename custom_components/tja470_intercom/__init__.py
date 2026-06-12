@@ -23,6 +23,8 @@ from aiotja470_intercom.exceptions import TJA470AuthError, TJA470Error
 from .const import CONF_COOKIES, CONF_UUID, DOMAIN, LOGGER
 from .coordinator import TJA470Coordinator
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 PLATFORMS = [Platform.CAMERA, Platform.BUTTON, Platform.SENSOR]
 
 SERVICE_OPEN_DOOR = "open_door"

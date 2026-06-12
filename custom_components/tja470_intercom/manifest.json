@@ -5,8 +5,8 @@
   "config_flow": true,
   "dependencies": ["ffmpeg", "frontend", "http", "network", "panel_custom"],
   "documentation": "https://github.com/r4nt/ha-tja470-intercom",
-  "issue_tracker": "https://github.com/r4nt/ha-tja470-intercom/issues",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/r4nt/ha-tja470-intercom/issues",
   "requirements": ["aiotja470-intercom==0.1.7"],
   "version": "1.0.0"
 }
