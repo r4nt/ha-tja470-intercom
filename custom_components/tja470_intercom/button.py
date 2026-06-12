@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -26,27 +27,51 @@ async def async_setup_entry(
     client: TJA470IntercomClient = entry.runtime_data.client
     coordinator: TJA470Coordinator = entry.runtime_data.coordinator
 
-    entities: list[ButtonEntity] = []
-
-    # Add active door release button for the controller
-    entities.append(TJA470OpenActiveDoorButton(coordinator, client))
-    # Add switch camera button for the controller
-    entities.append(TJA470SwitchCameraButton(coordinator, client))
-
-    # Add individual door release buttons for each door station element
     prov = coordinator.data["provisioning"]
+    known_sip_ids: set[str] = set()
+
+    entities: list[ButtonEntity] = [
+        TJA470OpenActiveDoorButton(coordinator, client),
+        TJA470SwitchCameraButton(coordinator, client),
+    ]
     for element in prov.called_elements:
         if element.order is not None:
+            known_sip_ids.add(element.sip_id)
             entities.append(TJA470OpenDoorButton(coordinator, client, element))
 
     async_add_entities(entities)
+
+    @callback
+    def _async_add_new_door_buttons() -> None:
+        """Add button entities for door stations that appear after initial setup."""
+        new_prov = coordinator.data.get("provisioning") if coordinator.data else None
+        if new_prov is None:
+            return
+        new_entities = []
+        for element in new_prov.called_elements:
+            if element.order is not None and element.sip_id not in known_sip_ids:
+                known_sip_ids.add(element.sip_id)
+                device_reg = dr.async_get(hass)
+                device_reg.async_get_or_create(
+                    config_entry_id=entry.entry_id,
+                    identifiers={(DOMAIN, f"door_{element.sip_id}")},
+                    name=element.name or f"Door Station {element.order}",
+                    manufacturer="Hager",
+                    model="TJA470 Door Station",
+                    via_device=(DOMAIN, entry.entry_id),
+                )
+                new_entities.append(TJA470OpenDoorButton(coordinator, client, element))
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_new_door_buttons))
 
 
 class TJA470OpenActiveDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
     """Button to open the currently active door."""
 
     _attr_has_entity_name = True
-    _attr_icon = "mdi:door-open"
+    _attr_translation_key = "open_active_door"
 
     def __init__(
         self,
@@ -57,7 +82,6 @@ class TJA470OpenActiveDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEnt
         super().__init__(coordinator)
         self.client = client
         self._attr_unique_id = f"{coordinator.entry.entry_id}_open_active_door"
-        self._attr_name = "Open Active Door"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
         )
@@ -71,7 +95,7 @@ class TJA470SwitchCameraButton(CoordinatorEntity[TJA470Coordinator], ButtonEntit
     """Button to switch the active camera feed to the next position."""
 
     _attr_has_entity_name = True
-    _attr_icon = "mdi:camera-switch"
+    _attr_translation_key = "switch_camera"
 
     def __init__(
         self,
@@ -82,7 +106,6 @@ class TJA470SwitchCameraButton(CoordinatorEntity[TJA470Coordinator], ButtonEntit
         super().__init__(coordinator)
         self.client = client
         self._attr_unique_id = f"{coordinator.entry.entry_id}_switch_camera"
-        self._attr_name = "Switch Camera"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
         )
@@ -98,7 +121,7 @@ class TJA470OpenDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
     """Button to open a specific door station."""
 
     _attr_has_entity_name = True
-    _attr_icon = "mdi:door-open"
+    _attr_translation_key = "open_door"
 
     def __init__(
         self,
@@ -111,7 +134,6 @@ class TJA470OpenDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
         self.client = client
         self.element = element
         self._attr_unique_id = f"{coordinator.entry.entry_id}_open_door_{element.sip_id}"
-        self._attr_name = "Open"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"door_{element.sip_id}")},
         )

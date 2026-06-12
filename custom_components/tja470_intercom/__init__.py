@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue, async_delete_issue
 from homeassistant.helpers.typing import ConfigType
 
 from aiotja470_intercom import TJA470IntercomClient, AiohttpRunner, TJA470SipPhone, TJA470SipCall
@@ -165,12 +166,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         door_id = call.data.get("door_id", 1)
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise ServiceValidationError("No TJA470 integration clients found")
+            raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="no_clients_found"
+        )
         for cli in clients:
             try:
                 await cli.open_door(door_id=door_id)
             except TJA470Error as err:
-                raise HomeAssistantError(f"Failed to open door: {err}") from err
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="open_door_failed",
+                    translation_placeholders={"error": str(err)},
+                ) from err
 
     async def handle_open_door_at_position(call: ServiceCall) -> None:
         device_ids = call.data.get("device_id", [])
@@ -179,7 +186,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         max_attempts = call.data.get("max_attempts", 10)
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise ServiceValidationError("No TJA470 integration clients found")
+            raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="no_clients_found"
+        )
         for cli in clients:
             client_uuid = None
             for entry in hass.config_entries.async_entries(DOMAIN):
@@ -197,7 +206,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 )
             except TJA470Error as err:
                 raise HomeAssistantError(
-                    f"Failed to open door at position {position}: {err}"
+                    translation_domain=DOMAIN,
+                    translation_key="open_door_at_position_failed",
+                    translation_placeholders={"position": str(position), "error": str(err)},
                 ) from err
 
     async def handle_switch_camera(call: ServiceCall) -> None:
@@ -206,7 +217,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         max_attempts = call.data.get("max_attempts", 10)
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise ServiceValidationError("No TJA470 integration clients found")
+            raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="no_clients_found"
+        )
         for cli in clients:
             client_uuid = None
             for entry in hass.config_entries.async_entries(DOMAIN):
@@ -226,13 +239,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 else:
                     await cli.switch_camera(client_uuid)
             except TJA470Error as err:
-                raise HomeAssistantError(f"Failed to switch camera: {err}") from err
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="switch_camera_failed",
+                    translation_placeholders={"error": str(err)},
+                ) from err
 
     async def handle_get_sip_credentials(call: ServiceCall) -> ServiceResponse:
         device_ids = call.data.get("device_id", [])
         clients = await _resolve_clients(device_ids)
         if not clients:
-            raise ServiceValidationError("No TJA470 integration clients found")
+            raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="no_clients_found"
+        )
         cli = clients[0]
         coordinator = None
         for entry in hass.config_entries.async_entries(DOMAIN):
@@ -243,7 +262,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             except AttributeError:
                 pass
         if not coordinator or not coordinator.data or "provisioning" not in coordinator.data:
-            raise HomeAssistantError("Provisioning data not loaded yet")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="provisioning_not_loaded"
+            )
         prov = coordinator.data["provisioning"]
         return {
             "sip_registrar": coordinator.entry.data[CONF_HOST],
@@ -258,7 +279,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 try:
                     await runtime.active_call.answer()
                 except Exception as err:
-                    raise HomeAssistantError(f"Failed to answer call: {err}") from err
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="answer_call_failed",
+                        translation_placeholders={"error": str(err)},
+                    ) from err
                 finally:
                     from homeassistant.helpers.dispatcher import async_dispatcher_send
                     async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
@@ -270,7 +295,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 try:
                     await runtime.active_call.hangup()
                 except Exception as err:
-                    raise HomeAssistantError(f"Failed to hang up call: {err}") from err
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="hangup_call_failed",
+                        translation_placeholders={"error": str(err)},
+                    ) from err
                 finally:
                     runtime.active_call = None
                     from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -336,7 +365,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 if runtime.active_call == placeholder:
                     runtime.active_call = None
                     async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
-                raise HomeAssistantError(f"Failed to initiate call to {number}: {err}") from err
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="initiate_call_failed",
+                    translation_placeholders={"number": number, "error": str(err)},
+                ) from err
 
     async def handle_trigger_incoming_ring(call: ServiceCall) -> None:
         from pyVoIP.VoIP import CallState
@@ -596,8 +629,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         await sip_phone.start()
+        async_delete_issue(hass, DOMAIN, f"sip_phone_failed_{entry.entry_id}")
     except Exception as err:
         LOGGER.error("Failed to start SIP phone: %s", err)
+        async_create_issue(
+            hass,
+            DOMAIN,
+            f"sip_phone_failed_{entry.entry_id}",
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key="sip_phone_failed",
+            translation_placeholders={"host": host},
+        )
 
     if "websocket_view_registered" not in hass.data[DOMAIN]:
         hass.http.register_view(TJA470AudioStreamView())
@@ -623,6 +666,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 via_device=(DOMAIN, entry.entry_id),
             )
 
+    from homeassistant.core import callback
+
+    @callback
+    def _async_remove_stale_door_devices() -> None:
+        """Remove door station devices that are no longer in provisioning data."""
+        prov = coordinator.data.get("provisioning") if coordinator.data else None
+        if prov is None:
+            return
+        current_sip_ids = {e.sip_id for e in prov.called_elements if e.order is not None}
+        device_reg = dr.async_get(hass)
+        for device_entry in dr.async_entries_for_config_entry(device_reg, entry.entry_id):
+            for domain, identifier in device_entry.identifiers:
+                if domain == DOMAIN and identifier.startswith("door_"):
+                    if identifier[len("door_"):] not in current_sip_ids:
+                        device_reg.async_remove_device(device_entry.id)
+                    break
+
+    entry.async_on_unload(coordinator.async_add_listener(_async_remove_stale_door_devices))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -640,4 +702,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:
             LOGGER.error("Error stopping SIP phone client: %s", err)
 
+    async_delete_issue(hass, DOMAIN, f"sip_phone_failed_{entry.entry_id}")
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

@@ -34,14 +34,13 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
 
     _attr_has_entity_name = True
     _attr_supported_features = CameraEntityFeature.STREAM
-    _attr_icon = "mdi:doorbell-video"
+    _attr_translation_key = "camera"
 
     def __init__(self, coordinator: TJA470Coordinator) -> None:
         """Initialize camera."""
         super().__init__(coordinator)
         Camera.__init__(self)
         self._attr_unique_id = f"{coordinator.entry.entry_id}_camera"
-        self._attr_name = "Camera"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
         )

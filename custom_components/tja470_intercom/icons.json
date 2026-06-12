@@ -1,0 +1,41 @@
+{
+  "entity": {
+    "camera": {
+      "camera": {
+        "default": "mdi:doorbell-video"
+      }
+    },
+    "button": {
+      "open_active_door": {
+        "default": "mdi:door-open"
+      },
+      "open_door": {
+        "default": "mdi:door-open"
+      },
+      "switch_camera": {
+        "default": "mdi:camera-switch"
+      }
+    },
+    "sensor": {
+      "sip_registrar": {
+        "default": "mdi:sip"
+      },
+      "rtsp_url": {
+        "default": "mdi:video"
+      },
+      "sip_status": {
+        "default": "mdi:sip"
+      }
+    }
+  },
+  "services": {
+    "open_door": "mdi:door-open",
+    "open_door_at_position": "mdi:door-open",
+    "switch_camera": "mdi:camera-switch",
+    "answer_call": "mdi:phone-in-talk",
+    "hangup_call": "mdi:phone-hangup",
+    "initiate_call": "mdi:phone-outgoing",
+    "get_sip_credentials": "mdi:key",
+    "trigger_incoming_ring": "mdi:bell-ring"
+  }
+}

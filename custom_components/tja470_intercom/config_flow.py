@@ -169,6 +169,54 @@ class TJA470ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Allow reconfiguring host and credentials."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            new_host = user_input[CONF_HOST]
+            session = async_get_clientsession(self.hass)
+            runner = AiohttpRunner(session)
+            client = TJA470IntercomClient(
+                new_host, user_input[CONF_USERNAME], user_input[CONF_PASSWORD], runner
+            )
+            try:
+                await client.get_manifest()
+            except TJA470AuthError:
+                errors["base"] = "invalid_auth"
+            except TJA470ConnectionError:
+                errors["base"] = "cannot_connect"
+            except TJA470Error as err:
+                LOGGER.error("Unexpected error during reconfigure: %s", err)
+                errors["base"] = "unknown"
+
+            if not errors:
+                await self.async_set_unique_id(new_host)
+                self._abort_if_unique_id_mismatch()
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates={
+                        CONF_HOST: new_host,
+                        CONF_USERNAME: user_input[CONF_USERNAME],
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HOST, default=entry.data.get(CONF_HOST, "")): str,
+                    vol.Required(CONF_USERNAME, default=entry.data.get(CONF_USERNAME, "")): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
+        )
+
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
     ) -> FlowResult:

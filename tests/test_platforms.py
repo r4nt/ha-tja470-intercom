@@ -114,16 +114,23 @@ async def test_platforms(hass: HomeAssistant) -> None:
         assert attrs["remote_sip_port"] == 22896
         assert attrs["remote_sip_ws_port"] == 443
 
-        # Verify Sensor platform
-        sip_username_eid = next((eid for eid in states if eid.endswith("sip_username")), None)
-        assert sip_username_eid is None
+        # Verify Sensor platform — sensors are disabled by default (diagnostic)
+        from homeassistant.helpers import entity_registry as er
+        ent_reg = er.async_get(hass)
 
-        sip_password_eid = next((eid for eid in states if eid.endswith("sip_password")), None)
-        assert sip_password_eid is None
+        rtsp_entry = next(
+            (e for e in ent_reg.entities.values() if e.entity_id.endswith("rtsp_stream_url")),
+            None,
+        )
+        assert rtsp_entry is not None
+        assert rtsp_entry.disabled_by is not None  # disabled by default
 
-        rtsp_url_eid = next((eid for eid in states if eid.endswith("rtsp_stream_url")), None)
-        assert rtsp_url_eid is not None
-        assert states[rtsp_url_eid].state == "rtsp://192.168.42.2:9099/high"
+        sip_reg_entry = next(
+            (e for e in ent_reg.entities.values() if e.entity_id.endswith("sip_registrar")),
+            None,
+        )
+        assert sip_reg_entry is not None
+        assert sip_reg_entry.disabled_by is not None
 
         # Verify Switch Camera platform
         switch_camera_btn = next((eid for eid in states if eid.endswith("switch_camera")), None)

@@ -28,6 +28,15 @@
           "username": "Username",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Hager TJA470 Intercom",
+        "description": "Update the connection details for your Hager TJA470 Intercom.",
+        "data": {
+          "host": "IP Address or Hostname",
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -36,7 +45,9 @@
       "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This Hager TJA470 Intercom is already configured."
+      "already_configured": "This Hager TJA470 Intercom is already configured.",
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Reconfiguration was successful."
     }
   },
   "options": {
@@ -49,6 +60,67 @@
           "notify_devices_text": "Devices to notify (comma-separated)"
         }
       }
+    }
+  },
+  "entity": {
+    "camera": {
+      "camera": {
+        "name": "Camera"
+      }
+    },
+    "button": {
+      "open_active_door": {
+        "name": "Open Active Door"
+      },
+      "open_door": {
+        "name": "Open"
+      },
+      "switch_camera": {
+        "name": "Switch Camera"
+      }
+    },
+    "sensor": {
+      "sip_registrar": {
+        "name": "SIP Registrar"
+      },
+      "rtsp_url": {
+        "name": "RTSP Stream URL"
+      },
+      "sip_status": {
+        "name": "SIP Registration Status"
+      }
+    }
+  },
+  "exceptions": {
+    "no_clients_found": {
+      "message": "No TJA470 integration clients found. Make sure the integration is loaded and a device is targeted."
+    },
+    "open_door_failed": {
+      "message": "Failed to open door: {error}"
+    },
+    "open_door_at_position_failed": {
+      "message": "Failed to open door at position {position}: {error}"
+    },
+    "switch_camera_failed": {
+      "message": "Failed to switch camera: {error}"
+    },
+    "provisioning_not_loaded": {
+      "message": "Provisioning data is not yet loaded. Please wait for the integration to initialize."
+    },
+    "answer_call_failed": {
+      "message": "Failed to answer call: {error}"
+    },
+    "hangup_call_failed": {
+      "message": "Failed to hang up call: {error}"
+    },
+    "initiate_call_failed": {
+      "message": "Failed to initiate call to {number}: {error}"
+    }
+  },
+  "issues": {
+    "sip_phone_failed": {
+      "title": "SIP phone failed to start",
+      "description": "The SIP phone for the TJA470 Intercom at {host} failed to start. Incoming calls will not be received. Check your network configuration and reload the integration to retry."
     }
   }
 }

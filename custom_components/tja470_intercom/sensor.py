@@ -28,16 +28,16 @@ class TJA470SensorEntityDescription(SensorEntityDescription):
 SENSOR_DESCRIPTIONS: tuple[TJA470SensorEntityDescription, ...] = (
     TJA470SensorEntityDescription(
         key="sip_registrar",
-        name="SIP Registrar",
-        icon="mdi:sip",
+        translation_key="sip_registrar",
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda data, entry: entry.data[CONF_HOST],
     ),
     TJA470SensorEntityDescription(
         key="rtsp_url",
-        name="RTSP Stream URL",
-        icon="mdi:video",
+        translation_key="rtsp_url",
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda data, entry: data["provisioning"].rtsp_video_url.replace(
             "${ipadress}", entry.data[CONF_HOST]
         )
@@ -46,9 +46,9 @@ SENSOR_DESCRIPTIONS: tuple[TJA470SensorEntityDescription, ...] = (
     ),
     TJA470SensorEntityDescription(
         key="sip_status",
-        name="SIP Registration Status",
-        icon="mdi:sip",
+        translation_key="sip_status",
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda data, entry: data.get("sip_status", "INACTIVE"),
     ),
 )
