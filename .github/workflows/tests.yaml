@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    name: Tests & Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements_test.txt
+
+      - name: Type check
+        run: mypy --strict --ignore-missing-imports custom_components/tja470_intercom/
+
+      - name: Run tests
+        run: >
+          pytest tests/
+          --cov=custom_components/tja470_intercom
+          --cov-report=term-missing
+          --cov-report=xml
+
+      - name: Write coverage summary
+        run: coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage XML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30

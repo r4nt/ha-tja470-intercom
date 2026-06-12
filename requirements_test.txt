@@ -1,0 +1,4 @@
+pytest-homeassistant-custom-component==0.13.337
+pytest-cov==7.1.0
+aiotja470-intercom==0.1.7
+mypy==2.1.0
