@@ -370,17 +370,14 @@ class TJA470IntercomCard extends HTMLElement {
       }
       .history-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        cursor: pointer;
         padding: 6px 4px;
-        font-weight: 500;
-        font-size: 0.85rem;
+        font-weight: 600;
+        font-size: 0.75rem;
         color: var(--secondary-text-color, #888);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
         user-select: none;
-      }
-      .history-header:hover {
-        color: var(--primary-text-color, #212121);
       }
       .history-list {
         display: flex;
@@ -577,20 +574,14 @@ class TJA470IntercomCard extends HTMLElement {
 
     const historyHeader = document.createElement('div');
     historyHeader.className = 'history-header';
-    historyHeader.onclick = () => this._toggleHistory();
 
     const historyTitle = document.createElement('span');
     historyTitle.textContent = 'Call History';
     historyHeader.appendChild(historyTitle);
-
-    const historyIcon = document.createElement('ha-icon');
-    historyIcon.setAttribute('icon', 'mdi:chevron-down');
-    historyHeader.appendChild(historyIcon);
-    this._elements.historyIcon = historyIcon;
     historyContainer.appendChild(historyHeader);
 
     const historyList = document.createElement('div');
-    historyList.className = 'history-list hidden';
+    historyList.className = 'history-list';
     this._elements.historyList = historyList;
     historyContainer.appendChild(historyList);
 
@@ -964,19 +955,6 @@ class TJA470IntercomCard extends HTMLElement {
     if (this._ws) {
       try { this._ws.close(); } catch(e){}
       this._ws = null;
-    }
-  }
-
-  _toggleHistory() {
-    const list = this._elements.historyList;
-    const icon = this._elements.historyIcon;
-    if (list.classList.contains('hidden')) {
-      list.classList.remove('hidden');
-      icon.setAttribute('icon', 'mdi:chevron-up');
-      this._fetchHistory();
-    } else {
-      list.classList.add('hidden');
-      icon.setAttribute('icon', 'mdi:chevron-down');
     }
   }
 
