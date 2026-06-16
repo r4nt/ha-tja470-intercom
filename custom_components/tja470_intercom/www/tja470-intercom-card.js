@@ -545,8 +545,12 @@ class TJA470IntercomCard extends HTMLElement {
       }
     }
 
+    const unlockBtnEntityId = entityId.replace(/_camera$/, '_open_active_door').replace(/^camera\./, 'button.');
+    const unlockBtnStateObj = this._hass.states[unlockBtnEntityId];
+    const doorReleaseAllowed = unlockBtnStateObj ? (unlockBtnStateObj.state !== 'unavailable') : (attr.door_release_allowed !== false);
+
     if (this._elements.unlockBtn) {
-      this._elements.unlockBtn.disabled = attr.door_release_allowed === false || isOffline;
+      this._elements.unlockBtn.disabled = !doorReleaseAllowed || isOffline;
     }
 
     if (callState === 'answered') {
@@ -598,49 +602,58 @@ class TJA470IntercomCard extends HTMLElement {
     }
 
     const doorsKey = JSON.stringify(configuredDoors);
-    if (this._renderedDoorsKey === doorsKey) return;
-    this._renderedDoorsKey = doorsKey;
+    if (this._renderedDoorsKey !== doorsKey) {
+      this._renderedDoorsKey = doorsKey;
+      extraDoorsContainer.classList.remove('hidden');
+      extraDoorsContainer.replaceChildren();
 
-    extraDoorsContainer.classList.remove('hidden');
-    extraDoorsContainer.replaceChildren();
+      configuredDoors.forEach(door => {
+        const entityId = door.entity;
+        const doorName = door.name || entityId.split('.').pop().replace(/_/g, ' ');
 
-    configuredDoors.forEach(door => {
-      const entityId = door.entity;
-      const doorName = door.name || entityId.split('.').pop().replace(/_/g, ' ');
+        const row = document.createElement('div');
+        row.className = 'extra-door-row';
 
-      const row = document.createElement('div');
-      row.className = 'extra-door-row';
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'extra-door-name';
+        nameSpan.textContent = doorName;
+        row.appendChild(nameSpan);
 
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'extra-door-name';
-      nameSpan.textContent = doorName;
-      row.appendChild(nameSpan);
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'extra-door-actions';
 
-      const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'extra-door-actions';
+        if (door.sip_id) {
+          const callBtn = document.createElement('button');
+          callBtn.className = 'btn btn-switch btn-mini';
+          const callIcon = document.createElement('ha-icon');
+          callIcon.setAttribute('icon', 'mdi:phone');
+          callBtn.appendChild(callIcon);
+          callBtn.appendChild(document.createTextNode('Call'));
+          callBtn.onclick = () => this._handleInitiateCallForSip(callBtn, door.sip_id);
+          actionsDiv.appendChild(callBtn);
+        }
 
-      if (door.sip_id) {
-        const callBtn = document.createElement('button');
-        callBtn.className = 'btn btn-switch btn-mini';
-        const callIcon = document.createElement('ha-icon');
-        callIcon.setAttribute('icon', 'mdi:phone');
-        callBtn.appendChild(callIcon);
-        callBtn.appendChild(document.createTextNode('Call'));
-        callBtn.onclick = () => this._handleInitiateCallForSip(callBtn, door.sip_id);
-        actionsDiv.appendChild(callBtn);
-      }
+        const unlockBtn = document.createElement('button');
+        unlockBtn.className = 'btn btn-unlock btn-mini';
+        unlockBtn.dataset.entity = entityId;
+        const unlockIcon = document.createElement('ha-icon');
+        unlockIcon.setAttribute('icon', 'mdi:door-open');
+        unlockBtn.appendChild(unlockIcon);
+        unlockBtn.appendChild(document.createTextNode('Unlock'));
+        unlockBtn.onclick = () => this._handleMiniUnlock(unlockBtn, entityId);
+        actionsDiv.appendChild(unlockBtn);
 
-      const unlockBtn = document.createElement('button');
-      unlockBtn.className = 'btn btn-unlock btn-mini';
-      const unlockIcon = document.createElement('ha-icon');
-      unlockIcon.setAttribute('icon', 'mdi:door-open');
-      unlockBtn.appendChild(unlockIcon);
-      unlockBtn.appendChild(document.createTextNode('Unlock'));
-      unlockBtn.onclick = () => this._handleMiniUnlock(unlockBtn, entityId);
-      actionsDiv.appendChild(unlockBtn);
+        row.appendChild(actionsDiv);
+        extraDoorsContainer.appendChild(row);
+      });
+    }
 
-      row.appendChild(actionsDiv);
-      extraDoorsContainer.appendChild(row);
+    const isOffline = this._hass.states[this._resolvedEntityId].state === 'unavailable' || this._hass.states[this._resolvedEntityId].state === 'unknown';
+    const miniButtons = extraDoorsContainer.querySelectorAll('button.btn-unlock.btn-mini');
+    miniButtons.forEach(btn => {
+      const entityId = btn.dataset.entity;
+      const btnStateObj = this._hass.states[entityId];
+      btn.disabled = isOffline || (btnStateObj ? btnStateObj.state === 'unavailable' : false);
     });
   }
 

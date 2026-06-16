@@ -101,7 +101,11 @@ async def test_platforms(hass: HomeAssistant) -> None:
         # Verify extra state attributes on the camera entity
         attrs = camera_entity.extra_state_attributes
         assert attrs["config_entry_id"] == entry.entry_id
-        assert attrs["door_release_allowed"] is True
+
+        # Verify button availability reflects door_release_allowed
+        open_active_btn = next((eid for eid in states if eid.endswith("open_active_door")), None)
+        assert open_active_btn is not None
+        assert hass.states.get(open_active_btn).state != "unavailable"
 
         # Verify Sensor platform — sensors are disabled by default (diagnostic)
         from homeassistant.helpers import entity_registry as er

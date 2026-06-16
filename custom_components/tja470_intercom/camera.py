@@ -91,11 +91,6 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return camera state attributes."""
-        prov = self.coordinator.data.get("provisioning")
-        if not prov:
-            return {}
-
         return {
             "config_entry_id": self.coordinator.entry.entry_id,
-            "door_release_allowed": prov.door_release_allowed,
         }

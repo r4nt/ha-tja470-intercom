@@ -86,6 +86,14 @@ class TJA470OpenActiveDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEnt
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
         )
 
+    @property
+    def available(self) -> bool:
+        """Return True if door release is allowed."""
+        if not super().available:
+            return False
+        prov = self.coordinator.data.get("provisioning")
+        return prov is not None and prov.door_release_allowed
+
     async def async_press(self) -> None:
         """Press the button."""
         await self.client.open_door(door_id=1)
@@ -137,6 +145,14 @@ class TJA470OpenDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"door_{element.sip_id}")},
         )
+
+    @property
+    def available(self) -> bool:
+        """Return True if door release is allowed."""
+        if not super().available:
+            return False
+        prov = self.coordinator.data.get("provisioning")
+        return prov is not None and prov.door_release_allowed
 
     async def async_press(self) -> None:
         """Press the button."""
