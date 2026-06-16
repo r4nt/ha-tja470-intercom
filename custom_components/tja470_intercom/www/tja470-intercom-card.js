@@ -160,16 +160,10 @@ class TJA470IntercomCard extends HTMLElement {
         background: var(--primary-background-color, #1a1a1a);
         box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4);
       }
-      .feed-container img {
+      .feed-container ha-camera-stream {
         width: 100%;
         height: 100%;
-        object-fit: cover;
-        opacity: 0;
-        transition: opacity 0.5s ease-in-out;
         display: block;
-      }
-      .feed-container img.loaded {
-        opacity: 1;
       }
       .placeholder {
         position: absolute;
@@ -402,15 +396,12 @@ class TJA470IntercomCard extends HTMLElement {
     this._elements.placeholder = placeholder;
     feedContainer.appendChild(placeholder);
 
-    // Image inside feed
-    const imgEl = document.createElement('img');
-    imgEl.alt = 'Camera Feed';
-    imgEl.onload = () => {
-      imgEl.classList.add('loaded');
-      placeholder.classList.add('hidden');
-    };
-    this._elements.img = imgEl;
-    feedContainer.appendChild(imgEl);
+    // Stream inside feed
+    const streamEl = document.createElement('ha-camera-stream');
+    streamEl.showControls = false;
+    streamEl.muted = true;
+    this._elements.stream = streamEl;
+    feedContainer.appendChild(streamEl);
 
     // Status dot and text overlay inside feed
     const statusOverlay = document.createElement('div');
@@ -520,14 +511,31 @@ class TJA470IntercomCard extends HTMLElement {
       this._elements.statusDot.className = `status-dot ${statusClass}`;
     }
 
-    const token = attr.access_token;
     const entityId = stateObj.entity_id;
-    if (token && (this._currentToken !== token || this._currentEntityId !== entityId)) {
-      this._currentToken = token;
+    if (this._currentEntityId !== entityId) {
       this._currentEntityId = entityId;
-      this._elements.img.classList.remove('loaded');
+    }
+    if (this._elements.stream) {
+      this._elements.stream.hass = this._hass;
+      if (this._elements.stream.stateObj !== stateObj) {
+        this._elements.stream.stateObj = stateObj;
+      }
+    }
+
+    if (isOffline) {
       this._elements.placeholder.classList.remove('hidden');
-      this._elements.img.src = `/api/camera_proxy_stream/${entityId}?token=${token}`;
+      const icon = this._elements.placeholder.querySelector('ha-icon');
+      const span = this._elements.placeholder.querySelector('span');
+      if (icon) icon.setAttribute('icon', 'mdi:camera-off');
+      if (span) span.textContent = 'Camera Offline';
+      if (this._elements.stream) {
+        this._elements.stream.classList.add('hidden');
+      }
+    } else {
+      this._elements.placeholder.classList.add('hidden');
+      if (this._elements.stream) {
+        this._elements.stream.classList.remove('hidden');
+      }
     }
 
     if (this._elements.unlockBtn) {
