@@ -1,6 +1,7 @@
 .PHONY: clean test run stop
 
 test:
+	.venv/bin/mypy custom_components/
 	.venv/bin/pytest tests/ -o asyncio_mode=auto
 
 run:

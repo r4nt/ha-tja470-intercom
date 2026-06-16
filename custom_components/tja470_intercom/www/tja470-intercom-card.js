@@ -363,6 +363,111 @@ class TJA470IntercomCard extends HTMLElement {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
       }
+      .history-container {
+        margin-top: 8px;
+        border-top: 1px solid var(--divider-color, #e0e0e0);
+        padding-top: 8px;
+      }
+      .history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        padding: 6px 4px;
+        font-weight: 500;
+        font-size: 0.85rem;
+        color: var(--secondary-text-color, #888);
+        user-select: none;
+      }
+      .history-header:hover {
+        color: var(--primary-text-color, #212121);
+      }
+      .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 6px;
+        max-height: 250px;
+        overflow-y: auto;
+      }
+      .history-item {
+        border: 1px solid var(--divider-color, #e0e0e0);
+        border-radius: 6px;
+        padding: 8px;
+        background: var(--secondary-background-color, #fafafa);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .history-item-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+      .history-item-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .history-item-time {
+        font-size: 0.75rem;
+        color: var(--secondary-text-color, #888);
+      }
+      .history-item-caller {
+        font-weight: 500;
+        font-size: 0.85rem;
+      }
+      .history-item-status-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .history-item-status-icon.answered {
+        color: var(--success-color, #4caf50);
+      }
+      .history-item-status-icon.missed {
+        color: var(--error-color, #f44336);
+      }
+      .history-snapshot-dropdown {
+        border-top: 1px dashed var(--divider-color, #e0e0e0);
+        margin-top: 6px;
+        padding-top: 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        position: relative;
+      }
+      .history-snapshot-img {
+        width: 100%;
+        border-radius: 4px;
+        max-height: 150px;
+        object-fit: cover;
+        background: #000;
+      }
+      .history-carousel-controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        font-size: 0.75rem;
+        color: var(--secondary-text-color, #888);
+      }
+      .history-carousel-btn {
+        background: none;
+        border: none;
+        padding: 4px 8px;
+        cursor: pointer;
+        color: var(--primary-color, #03a9f4);
+        display: flex;
+        align-items: center;
+        font-weight: 500;
+      }
+      .history-carousel-btn:disabled {
+        color: var(--disabled-text-color, #bdbdbd);
+        cursor: not-allowed;
+      }
     `;
     this.shadowRoot.appendChild(style);
 
@@ -467,11 +572,34 @@ class TJA470IntercomCard extends HTMLElement {
     extraDoors.className = 'extra-doors hidden';
     this._elements.extraDoors = extraDoors;
 
+    const historyContainer = document.createElement('div');
+    historyContainer.className = 'history-container';
+
+    const historyHeader = document.createElement('div');
+    historyHeader.className = 'history-header';
+    historyHeader.onclick = () => this._toggleHistory();
+
+    const historyTitle = document.createElement('span');
+    historyTitle.textContent = 'Call History';
+    historyHeader.appendChild(historyTitle);
+
+    const historyIcon = document.createElement('ha-icon');
+    historyIcon.setAttribute('icon', 'mdi:chevron-down');
+    historyHeader.appendChild(historyIcon);
+    this._elements.historyIcon = historyIcon;
+    historyContainer.appendChild(historyHeader);
+
+    const historyList = document.createElement('div');
+    historyList.className = 'history-list hidden';
+    this._elements.historyList = historyList;
+    historyContainer.appendChild(historyList);
+
     const card = document.createElement('ha-card');
     card.appendChild(headerContainer);
     card.appendChild(feedContainer);
     card.appendChild(controls);
     card.appendChild(extraDoors);
+    card.appendChild(historyContainer);
 
     this.shadowRoot.appendChild(card);
     this._updateCard(stateObj);
@@ -589,6 +717,9 @@ class TJA470IntercomCard extends HTMLElement {
     }
 
     this._updateExtraDoors();
+    if (this._elements.historyList && !this._elements.historyList.classList.contains('hidden')) {
+      this._fetchHistory();
+    }
   }
 
   _updateExtraDoors() {
@@ -834,6 +965,172 @@ class TJA470IntercomCard extends HTMLElement {
       try { this._ws.close(); } catch(e){}
       this._ws = null;
     }
+  }
+
+  _toggleHistory() {
+    const list = this._elements.historyList;
+    const icon = this._elements.historyIcon;
+    if (list.classList.contains('hidden')) {
+      list.classList.remove('hidden');
+      icon.setAttribute('icon', 'mdi:chevron-up');
+      this._fetchHistory();
+    } else {
+      list.classList.add('hidden');
+      icon.setAttribute('icon', 'mdi:chevron-down');
+    }
+  }
+
+  async _fetchHistory() {
+    try {
+      const history = await this._hass.callWS({ type: 'tja470_intercom/get_call_history' });
+      this._history = history;
+      this._renderHistory();
+    } catch (err) {
+      console.error("Failed to fetch call history", err);
+    }
+  }
+
+  _renderHistory() {
+    const list = this._elements.historyList;
+    if (!list) return;
+    list.replaceChildren();
+
+    if (!this._history || this._history.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.textAlign = 'center';
+      empty.style.padding = '12px';
+      empty.style.fontSize = '0.8rem';
+      empty.style.color = 'var(--secondary-text-color)';
+      empty.textContent = 'No call history';
+      list.appendChild(empty);
+      return;
+    }
+
+    if (!this._expandedItems) this._expandedItems = new Set();
+    if (!this._carouselIndices) this._carouselIndices = {};
+
+    this._history.forEach(item => {
+      const historyItem = document.createElement('div');
+      historyItem.className = 'history-item';
+
+      const row = document.createElement('div');
+      row.className = 'history-item-row';
+      row.onclick = () => this._toggleHistoryItem(item.id);
+
+      const left = document.createElement('div');
+      left.className = 'history-item-left';
+
+      const statusIcon = document.createElement('ha-icon');
+      if (item.answered) {
+        statusIcon.setAttribute('icon', 'mdi:phone-check');
+        statusIcon.className = 'history-item-status-icon answered';
+      } else {
+        statusIcon.setAttribute('icon', 'mdi:phone-missed');
+        statusIcon.className = 'history-item-status-icon missed';
+      }
+      left.appendChild(statusIcon);
+
+      const info = document.createElement('div');
+      info.style.display = 'flex';
+      info.style.flexDirection = 'column';
+
+      const callerName = document.createElement('span');
+      callerName.className = 'history-item-caller';
+      callerName.textContent = item.caller_name || item.caller;
+      info.appendChild(callerName);
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'history-item-time';
+
+      try {
+        const date = new Date(item.timestamp);
+        timeSpan.textContent = date.toLocaleString();
+      } catch {
+        timeSpan.textContent = item.timestamp;
+      }
+      info.appendChild(timeSpan);
+      left.appendChild(info);
+      row.appendChild(left);
+
+      const caret = document.createElement('ha-icon');
+      const isExpanded = this._expandedItems.has(item.id);
+      caret.setAttribute('icon', isExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down');
+      row.appendChild(caret);
+      historyItem.appendChild(row);
+
+      if (isExpanded) {
+        const dropdown = document.createElement('div');
+        dropdown.className = 'history-snapshot-dropdown';
+
+        if (item.snapshots_count > 0) {
+          const activeIdx = this._carouselIndices[item.id] || 0;
+          const token = this._hass.auth.data.access_token;
+
+          const img = document.createElement('img');
+          img.className = 'history-snapshot-img';
+          img.src = `/api/tja470_intercom/snapshot/${item.id}/${activeIdx}?token=${token}`;
+          img.alt = `Snapshot ${activeIdx + 1}`;
+          dropdown.appendChild(img);
+
+          if (item.snapshots_count > 1) {
+            const controls = document.createElement('div');
+            controls.className = 'history-carousel-controls';
+
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'history-carousel-btn';
+            prevBtn.textContent = '◀ Prev';
+            prevBtn.disabled = activeIdx === 0;
+            prevBtn.onclick = (e) => {
+              e.stopPropagation();
+              this._setCarouselIndex(item.id, activeIdx - 1);
+            };
+            controls.appendChild(prevBtn);
+
+            const indicator = document.createElement('span');
+            indicator.textContent = `${activeIdx + 1} of ${item.snapshots_count}`;
+            controls.appendChild(indicator);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'history-carousel-btn';
+            nextBtn.textContent = 'Next ▶';
+            nextBtn.disabled = activeIdx >= item.snapshots_count - 1;
+            nextBtn.onclick = (e) => {
+              e.stopPropagation();
+              this._setCarouselIndex(item.id, activeIdx + 1);
+            };
+            controls.appendChild(nextBtn);
+
+            dropdown.appendChild(controls);
+          }
+        } else {
+          const noSnapshot = document.createElement('span');
+          noSnapshot.style.fontSize = '0.75rem';
+          noSnapshot.style.color = 'var(--secondary-text-color)';
+          noSnapshot.textContent = 'No snapshots captured';
+          dropdown.appendChild(noSnapshot);
+        }
+        historyItem.appendChild(dropdown);
+      }
+
+      list.appendChild(historyItem);
+    });
+  }
+
+  _toggleHistoryItem(id) {
+    if (this._expandedItems.has(id)) {
+      this._expandedItems.delete(id);
+    } else {
+      this._expandedItems.add(id);
+      if (this._carouselIndices[id] === undefined) {
+        this._carouselIndices[id] = 0;
+      }
+    }
+    this._renderHistory();
+  }
+
+  _setCarouselIndex(id, idx) {
+    this._carouselIndices[id] = idx;
+    this._renderHistory();
   }
 
   _handleSwitch(buttonEl) {

@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue, async_delete_issue
 from homeassistant.helpers.typing import ConfigType
 
@@ -47,6 +48,189 @@ class TJA470RuntimeData:
     coordinator: TJA470Coordinator
     sip_phone: TJA470SipPhone
     active_call: Any = field(default=None)
+
+
+class TJA470SnapshotView(HomeAssistantView):
+    """View to serve camera snapshots taken during calls."""
+
+    url = "/api/tja470_intercom/snapshot/{call_id}/{index}"
+    name = "api:tja470_intercom:snapshot"
+    requires_auth = False
+
+    async def get(self, request: web.Request, call_id: str, index: str) -> web.StreamResponse:
+        """Handle request for snapshot."""
+        hass = request.app["hass"]
+        token = request.query.get("token")
+
+        if not token:
+            return web.Response(status=401, text="Unauthorized")
+
+        refresh_token = hass.auth.async_validate_access_token(token)
+        if refresh_token is None:
+            return web.Response(status=401, text="Unauthorized")
+
+        import os
+        snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
+        filename = f"snapshot_{call_id}_{index}.jpg"
+        file_path = os.path.join(snapshots_dir, filename)
+
+        if not os.path.abspath(file_path).startswith(os.path.abspath(snapshots_dir)):
+            return web.Response(status=403, text="Forbidden")
+
+        if not os.path.exists(file_path):
+            return web.Response(status=404, text="Not Found")
+
+        return web.FileResponse(file_path)
+
+
+from homeassistant.helpers.storage import Store
+
+async def async_get_history_store(hass: HomeAssistant) -> Store[list[dict[str, Any]]]:
+    """Get the history store."""
+    return Store(hass, 1, f"{DOMAIN}_history")
+
+
+async def async_get_call_history(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Get the call history."""
+    store = await async_get_history_store(hass)
+    data = await store.async_load()
+    if data is None:
+        return []
+    return data
+
+
+async def async_save_call_history(hass: HomeAssistant, history: list[dict[str, Any]]) -> None:
+    """Save the call history."""
+    store = await async_get_history_store(hass)
+    await store.async_save(history[:50])
+
+
+from homeassistant.components.websocket_api import ActiveConnection, async_response, websocket_command  # type: ignore
+
+@websocket_command({
+    vol.Required("type"): "tja470_intercom/get_call_history",
+})
+@async_response
+async def websocket_get_call_history(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Handle get_call_history websocket command."""
+    history = await async_get_call_history(hass)
+    connection.send_result(msg["id"], history)
+
+
+@websocket_command({
+    vol.Required("type"): "tja470_intercom/clear_call_history",
+})
+@async_response
+async def websocket_clear_call_history(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Handle clear_call_history websocket command."""
+    import os, shutil
+    snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
+    if os.path.exists(snapshots_dir):
+        try:
+            shutil.rmtree(snapshots_dir)
+        except Exception as err:
+            LOGGER.error("Error deleting snapshots dir: %s", err)
+    await async_save_call_history(hass, [])
+    connection.send_result(msg["id"])
+
+
+async def async_register_and_track_incoming_call(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    call: Any,
+) -> str:
+    """Register an incoming call, save it to history, and start capturing snapshots."""
+    import time
+    from datetime import datetime, timezone
+    import os
+
+    call_id = f"{int(time.time())}_{call.caller}"
+
+    caller_name = call.caller
+    coordinator = entry.runtime_data.coordinator
+    if coordinator.data and "provisioning" in coordinator.data:
+        for element in coordinator.data["provisioning"].called_elements:
+            if element.sip_id == call.caller and element.name:
+                caller_name = element.name
+                break
+
+    new_entry = {
+        "id": call_id,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "caller": call.caller,
+        "caller_name": caller_name,
+        "answered": False,
+        "snapshots_count": 0,
+    }
+
+    history = await async_get_call_history(hass)
+    history.insert(0, new_entry)
+    await async_save_call_history(hass, history)
+
+    entry.runtime_data.active_call = call
+
+    from homeassistant.helpers.dispatcher import async_dispatcher_send
+    async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+
+    async def capture_snapshots() -> None:
+        snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
+        os.makedirs(snapshots_dir, exist_ok=True)
+
+        camera_entity = None
+        from homeassistant.helpers import entity_registry as er
+        ent_reg = er.async_get(hass)
+        camera_eid = next(
+            (e.entity_id for e in ent_reg.entities.values()
+             if e.config_entry_id == entry.entry_id and e.domain == "camera"),
+            None
+        )
+        if camera_eid:
+            camera_entity = hass.data["entity_components"]["camera"].get_entity(camera_eid)
+
+        if not camera_entity:
+            LOGGER.warning("Camera entity not found, cannot capture snapshots")
+            return
+
+        captured = 0
+        for idx in range(3):
+            try:
+                current_call = entry.runtime_data.active_call
+            except AttributeError:
+                current_call = None
+            if not current_call or getattr(current_call, "caller", None) != call.caller:
+                break
+
+            try:
+                image_bytes = await camera_entity.async_camera_image()
+                if image_bytes:
+                    file_path = os.path.join(snapshots_dir, f"snapshot_{call_id}_{idx}.jpg")
+                    with open(file_path, "wb") as f:
+                        f.write(image_bytes)
+                    captured += 1
+
+                    current_history = await async_get_call_history(hass)
+                    for h_entry in current_history:
+                        if h_entry["id"] == call_id:
+                            h_entry["snapshots_count"] = captured
+                            break
+                    await async_save_call_history(hass, current_history)
+
+                    async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+            except Exception as err:
+                LOGGER.error("Error capturing call snapshot index %d: %s", idx, err)
+
+            await asyncio.sleep(5.0)
+
+    hass.async_create_background_task(capture_snapshots(), "tja470_capture_snapshots")
+    return call_id
 
 
 class TJA470AudioStreamView(HomeAssistantView):
@@ -119,6 +303,9 @@ class TJA470AudioStreamView(HomeAssistantView):
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the TJA470 Intercom domain and register services."""
     hass.data.setdefault(DOMAIN, {})
+    from homeassistant.components import websocket_api
+    websocket_api.async_register_command(hass, websocket_get_call_history)
+    websocket_api.async_register_command(hass, websocket_clear_call_history)
 
     def _get_runtime(entry_id: str) -> TJA470RuntimeData | None:
         entry = hass.config_entries.async_get_entry(entry_id)
@@ -277,8 +464,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         for entry_id in await _resolve_entry_ids(call.data):
             runtime = _get_runtime(entry_id)
             if runtime and runtime.active_call:
+                active_call = runtime.active_call
                 try:
-                    await runtime.active_call.answer()
+                    history = await async_get_call_history(hass)
+                    for h_entry in history:
+                        if h_entry["caller"] == active_call.caller and not h_entry["answered"]:
+                            h_entry["answered"] = True
+                            break
+                    await async_save_call_history(hass, history)
+                except Exception as err:
+                    LOGGER.error("Error updating call history to answered: %s", err)
+
+                try:
+                    await active_call.answer()
                 except Exception as err:
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -402,9 +600,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     pass
 
             mock_call = MockSipCall(caller)
-            runtime.active_call = mock_call
-            from homeassistant.helpers.dispatcher import async_dispatcher_send
-            async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
+            entry = hass.config_entries.async_get_entry(entry_id)
+            if entry:
+                await async_register_and_track_incoming_call(hass, entry, mock_call)
 
             async def monitor_call() -> None:
                 while mock_call.state != CallState.ENDED:
@@ -502,7 +700,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
         if not resources.loaded:
             await resources.async_load()
 
-        url = "/tja470-intercom/tja470-intercom-card.js?v=1.2.2"
+        url = "/tja470-intercom/tja470-intercom-card.js?v=1.3.0"
         for item in resources.async_items():
             if item.get("url", "").startswith("/tja470-intercom/tja470-intercom-card.js"):
                 if item.get("url") != url:
@@ -529,7 +727,7 @@ async def async_register_custom_panel(hass: HomeAssistant) -> None:
         webcomponent_name="tja470-intercom-panel",
         sidebar_title="Intercom",
         sidebar_icon="mdi:phone-in-talk",
-        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.2.2",
+        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.3.0",
         require_admin=False,
     )
 
@@ -573,9 +771,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_incoming_call(call: TJA470SipCall) -> None:
         LOGGER.info("Incoming SIP call from %s", call.caller)
         call.is_outgoing = False
-        entry.runtime_data.active_call = call
-        from homeassistant.helpers.dispatcher import async_dispatcher_send
-        async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+        await async_register_and_track_incoming_call(hass, entry, call)
 
         async def send_notifications() -> None:
             notify_devices = entry.options.get("notify_devices", [])
@@ -645,6 +841,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if "websocket_view_registered" not in hass.data[DOMAIN]:
         hass.http.register_view(TJA470AudioStreamView())
+        hass.http.register_view(TJA470SnapshotView())
         hass.data[DOMAIN]["websocket_view_registered"] = True
 
     device_registry = dr.async_get(hass)

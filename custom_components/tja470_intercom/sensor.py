@@ -44,8 +44,9 @@ def get_caller(entry: ConfigEntry) -> str | None:
         active_call = None
     if active_call:
         if getattr(active_call, "is_outgoing", False):
-            return getattr(active_call, "dest_number", active_call.caller)
-        return active_call.caller
+            val = getattr(active_call, "dest_number", active_call.caller)
+            return str(val) if val is not None else None
+        return str(active_call.caller) if active_call.caller is not None else None
     return None
 
 
