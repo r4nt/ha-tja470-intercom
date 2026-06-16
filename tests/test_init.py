@@ -184,7 +184,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     # Verify the item is created
     mock_resources.async_create_item.assert_called_once_with({
         "res_type": "module",
-        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.2.0",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.2.1",
     })
 
     # Test case 2: hass.is_running is False -> registers after EVENT_HOMEASSISTANT_STARTED
@@ -205,7 +205,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     # Now it should be registered
     mock_resources.async_create_item.assert_called_once_with({
         "res_type": "module",
-        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.2.0",
+        "url": "/tja470-intercom/tja470-intercom-card.js?v=1.2.1",
     })
 
     # Test case 3: updating resource when version is different
@@ -223,7 +223,7 @@ async def test_lovelace_resource_registration(hass: HomeAssistant) -> None:
     mock_resources.async_create_item.assert_not_called()
     mock_resources.async_update_item.assert_called_once_with(
         "card_id",
-        {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.2.0"}
+        {"res_type": "module", "url": "/tja470-intercom/tja470-intercom-card.js?v=1.2.1"}
     )
 
 
@@ -244,7 +244,7 @@ async def test_custom_panel_registration(hass: HomeAssistant) -> None:
             webcomponent_name="tja470-intercom-panel",
             sidebar_title="Intercom",
             sidebar_icon="mdi:phone-in-talk",
-            module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.2.0",
+            module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.2.1",
             require_admin=False,
         )
 
@@ -304,11 +304,12 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
         assert active_call.caller == "6001"
         assert active_call.is_outgoing is False
 
-        # Verify camera entity call_state is "ringing"
-        camera_entity_ids = hass.states.async_entity_ids("camera")
-        assert len(camera_entity_ids) > 0
-        camera_state = hass.states.get(camera_entity_ids[0])
-        assert camera_state.attributes["call_state"] == "ringing"
+        # Verify call_state and caller sensors
+        sensor_entity_ids = hass.states.async_entity_ids("sensor")
+        call_state_eid = next(eid for eid in sensor_entity_ids if eid.endswith("_call_state"))
+        caller_eid = next(eid for eid in sensor_entity_ids if eid.endswith("_caller"))
+        assert hass.states.get(call_state_eid).state == "ringing"
+        assert hass.states.get(caller_eid).state == "6001"
 
         # Answer active call
         await hass.services.async_call(
@@ -320,8 +321,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
         from pyVoIP.VoIP import CallState
         assert active_call.state == CallState.ANSWERED
         
-        camera_state = hass.states.get(camera_entity_ids[0])
-        assert camera_state.attributes["call_state"] == "answered"
+        assert hass.states.get(call_state_eid).state == "answered"
 
         # Hang up active call
         await hass.services.async_call(
@@ -331,8 +331,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
             blocking=True,
         )
         assert entry.runtime_data.active_call is None
-        camera_state = hass.states.get(camera_entity_ids[0])
-        assert camera_state.attributes["call_state"] == "idle"
+        assert hass.states.get(call_state_eid).state == "idle"
 
         # Test initiate_call (outgoing call)
         mock_outgoing_call = MagicMock()
@@ -354,8 +353,8 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
         assert active_call.caller == "6002"
         assert active_call.is_outgoing is True
 
-        camera_state = hass.states.get(camera_entity_ids[0])
-        assert camera_state.attributes["call_state"] == "dialing"
+        assert hass.states.get(call_state_eid).state == "dialing"
+        assert hass.states.get(caller_eid).state == "6002"
 
         # Test initiating a call while a call is already active
         mock_outgoing_call2 = MagicMock()
@@ -387,8 +386,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
             blocking=True,
         )
         assert entry.runtime_data.active_call is None
-        camera_state = hass.states.get(camera_entity_ids[0])
-        assert camera_state.attributes["call_state"] == "idle"
+        assert hass.states.get(call_state_eid).state == "idle"
 
 
 async def test_options_flow(hass: HomeAssistant) -> None:

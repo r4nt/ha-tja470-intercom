@@ -480,8 +480,15 @@ class TJA470IntercomCard extends HTMLElement {
   _updateCard(stateObj) {
     const isOffline = stateObj.state === 'unavailable' || stateObj.state === 'unknown';
     const attr = stateObj.attributes || {};
-    const callState = attr.call_state || 'idle';
-    const caller = attr.caller || 'Unknown Caller';
+    const baseEntityId = stateObj.entity_id.replace(/_camera$/, '');
+    const callStateEntityId = baseEntityId.replace(/^camera\./, 'sensor.') + '_call_state';
+    const callerEntityId = baseEntityId.replace(/^camera\./, 'sensor.') + '_caller';
+
+    const callStateStateObj = this._hass.states[callStateEntityId];
+    const callerStateObj = this._hass.states[callerEntityId];
+
+    const callState = callStateStateObj ? callStateStateObj.state : (attr.call_state || 'idle');
+    const caller = callerStateObj ? callerStateObj.state : (attr.caller || 'Unknown Caller');
 
     let statusText = 'Connecting...';
     let statusClass = 'connecting';

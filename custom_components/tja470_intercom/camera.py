@@ -95,54 +95,7 @@ class TJA470Camera(CoordinatorEntity[TJA470Coordinator], Camera):
         if not prov:
             return {}
 
-        attrs = {
+        return {
             "config_entry_id": self.coordinator.entry.entry_id,
-            "sip_username": prov.sip_info.sip_id,
-            "sip_password": prov.sip_info.sip_password,
-            "local_ip_address": prov.local_ip_address,
             "door_release_allowed": prov.door_release_allowed,
-            "local_http_video_url": prov.http_video_url,
         }
-
-        if prov.remote_access:
-            ra = prov.remote_access
-            attrs.update(
-                {
-                    "stun_server": ra.stun_turn_hostname,
-                    "stun_port": ra.stun_turn_port,
-                    "stun_username": ra.stun_turn_user,
-                    "stun_password": ra.stun_turn_password,
-                    "remote_rtsp_url": f"rtsp://{ra.rtsp_url}:{ra.rtsp_port}/high"
-                    if ra.rtsp_url
-                    else None,
-                    "remote_sip_server": ra.sip_tcp_url,
-                    "remote_sip_port": ra.sip_tcp_port,
-                    "remote_sip_ws_port": ra.ws_port,
-                }
-            )
-
-        # Include active call state
-        try:
-            active_call = self.coordinator.entry.runtime_data.active_call
-        except AttributeError:
-            active_call = None
-        if active_call:
-            from pyVoIP.VoIP import CallState
-            if active_call.state == CallState.ANSWERED:
-                attrs["call_state"] = "answered"
-            elif active_call.state in (CallState.RINGING, CallState.DIALING):
-                if getattr(active_call, "is_outgoing", False):
-                    attrs["call_state"] = "dialing"
-                else:
-                    attrs["call_state"] = "ringing"
-            else:
-                attrs["call_state"] = "idle"
-            if getattr(active_call, "is_outgoing", False):
-                attrs["caller"] = getattr(active_call, "dest_number", active_call.caller)
-            else:
-                attrs["caller"] = active_call.caller
-        else:
-            attrs["call_state"] = "idle"
-            attrs["caller"] = None
-
-        return attrs

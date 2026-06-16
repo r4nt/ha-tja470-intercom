@@ -100,19 +100,8 @@ async def test_platforms(hass: HomeAssistant) -> None:
 
         # Verify extra state attributes on the camera entity
         attrs = camera_entity.extra_state_attributes
-        assert attrs["sip_username"] == "6004"
-        assert attrs["sip_password"] == "pwd"
-        assert attrs["local_ip_address"] == "192.168.42.2"
+        assert attrs["config_entry_id"] == entry.entry_id
         assert attrs["door_release_allowed"] is True
-        assert attrs["local_http_video_url"] == "http://192.168.42.2:8021/mjpg/high"
-        assert attrs["stun_server"] == "global.turn.twilio.com"
-        assert attrs["stun_port"] == 3478
-        assert attrs["stun_username"] == "stun_user"
-        assert attrs["stun_password"] == "stun_pwd"
-        assert attrs["remote_rtsp_url"] == "rtsp://7.tcp.eu.ngrok.io:28867/high"
-        assert attrs["remote_sip_server"] == "5.tcp.eu.ngrok.io"
-        assert attrs["remote_sip_port"] == 22896
-        assert attrs["remote_sip_ws_port"] == 443
 
         # Verify Sensor platform — sensors are disabled by default (diagnostic)
         from homeassistant.helpers import entity_registry as er

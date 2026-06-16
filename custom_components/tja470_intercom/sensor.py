@@ -19,6 +19,36 @@ from .coordinator import TJA470Coordinator
 PARALLEL_UPDATES = 0
 
 
+def get_call_state_name(entry: ConfigEntry) -> str:
+    """Return the state name of the active call."""
+    try:
+        active_call = entry.runtime_data.active_call
+    except AttributeError:
+        active_call = None
+    if active_call:
+        from pyVoIP.VoIP import CallState
+        if active_call.state == CallState.ANSWERED:
+            return "answered"
+        if active_call.state in (CallState.RINGING, CallState.DIALING):
+            if getattr(active_call, "is_outgoing", False):
+                return "dialing"
+            return "ringing"
+    return "idle"
+
+
+def get_caller(entry: ConfigEntry) -> str | None:
+    """Return the caller ID of the active call."""
+    try:
+        active_call = entry.runtime_data.active_call
+    except AttributeError:
+        active_call = None
+    if active_call:
+        if getattr(active_call, "is_outgoing", False):
+            return getattr(active_call, "dest_number", active_call.caller)
+        return active_call.caller
+    return None
+
+
 @dataclass(frozen=True, kw_only=True)
 class TJA470SensorEntityDescription(SensorEntityDescription):
     """Class describing TJA470 sensor entities."""
@@ -51,6 +81,16 @@ SENSOR_DESCRIPTIONS: tuple[TJA470SensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
         value_fn=lambda data, entry: data.get("sip_status", "INACTIVE"),
+    ),
+    TJA470SensorEntityDescription(
+        key="call_state",
+        translation_key="call_state",
+        value_fn=lambda data, entry: get_call_state_name(entry),
+    ),
+    TJA470SensorEntityDescription(
+        key="caller",
+        translation_key="caller",
+        value_fn=lambda data, entry: get_caller(entry),
     ),
 )
 
@@ -86,6 +126,19 @@ class TJA470Sensor(CoordinatorEntity[TJA470Coordinator], SensorEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
         )
+
+    async def async_added_to_hass(self) -> None:
+        """Register callbacks."""
+        await super().async_added_to_hass()
+        if self.entity_description.key in ("call_state", "caller"):
+            from homeassistant.helpers.dispatcher import async_dispatcher_connect
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    f"{DOMAIN}_{self.coordinator.entry.entry_id}_call_update",
+                    self.async_write_ha_state,
+                )
+            )
 
     @property
     def native_value(self) -> str | None:

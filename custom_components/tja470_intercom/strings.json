@@ -88,6 +88,12 @@
       },
       "sip_status": {
         "name": "SIP Registration Status"
+      },
+      "call_state": {
+        "name": "Call State"
+      },
+      "caller": {
+        "name": "Caller"
       }
     }
   },
