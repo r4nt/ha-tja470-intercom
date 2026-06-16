@@ -389,6 +389,13 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
                 )
             ] = str
 
+        schema[
+            vol.Optional(
+                "snapshot_retention_days",
+                default=self.config_entry.options.get("snapshot_retention_days", 3),
+            )
+        ] = vol.All(vol.Coerce(int), vol.Range(min=0))
+
         # Generate a Markdown table of devices and their status
         table_lines = [
             "| Device Name | Service ID | Last Seen |",

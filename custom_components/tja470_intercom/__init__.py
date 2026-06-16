@@ -107,6 +107,45 @@ async def async_save_call_history(hass: HomeAssistant, history: list[dict[str, A
     await store.async_save(history[:50])
 
 
+async def async_cleanup_expired_snapshots(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clean up expired snapshots according to retention settings."""
+    from datetime import datetime, timezone, timedelta
+    import os
+
+    retention_days = entry.options.get("snapshot_retention_days", 3)
+    if retention_days == 0:
+        return
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    history = await async_get_call_history(hass)
+    updated = False
+
+    snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
+
+    for h_entry in history:
+        snapshots_count = h_entry.get("snapshots_count", 0)
+        if snapshots_count > 0:
+            try:
+                entry_time = datetime.fromisoformat(h_entry["timestamp"])
+                if entry_time < cutoff:
+                    for idx in range(snapshots_count):
+                        file_path = os.path.join(snapshots_dir, f"snapshot_{h_entry['id']}_{idx}.jpg")
+                        if os.path.exists(file_path):
+                            try:
+                                os.remove(file_path)
+                            except Exception as err:
+                                LOGGER.error("Failed to delete expired snapshot file %s: %s", file_path, err)
+                    h_entry["snapshots_count"] = 0
+                    updated = True
+            except (ValueError, KeyError) as err:
+                LOGGER.error("Failed to parse history entry timestamp or id: %s", err)
+
+    if updated:
+        await async_save_call_history(hass, history)
+        from homeassistant.helpers.dispatcher import async_dispatcher_send
+        async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+
+
 from homeassistant.components.websocket_api import ActiveConnection, async_response, websocket_command  # type: ignore
 
 @websocket_command({
@@ -180,6 +219,8 @@ async def async_register_and_track_incoming_call(
     entry.runtime_data.active_call = call
     entry.runtime_data.active_call_id = call_id
     entry.runtime_data.active_call_snapshots = 0
+
+    await async_cleanup_expired_snapshots(hass, entry)
 
     from homeassistant.helpers.dispatcher import async_dispatcher_send
     async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
@@ -902,6 +943,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(coordinator.async_add_listener(_async_remove_stale_door_devices))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Clean up expired snapshots on startup
+    hass.async_create_background_task(
+        async_cleanup_expired_snapshots(hass, entry),
+        "tja470_expired_snapshots_cleanup"
+    )
+
     return True
 
 

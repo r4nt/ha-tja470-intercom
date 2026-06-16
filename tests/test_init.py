@@ -418,6 +418,7 @@ async def test_options_flow(hass: HomeAssistant) -> None:
     assert result["type"] == "create_entry"
     assert entry.options == {
         "notify_devices": ["mobile_app_phone1", "mobile_app_phone2"],
+        "snapshot_retention_days": 3,
     }
 
 
@@ -492,6 +493,7 @@ async def test_options_flow_with_device_trackers(hass: HomeAssistant) -> None:
     assert result2["type"] == "create_entry"
     assert entry.options == {
         "notify_devices": ["notify.mobile_app_my_new_phone"],
+        "snapshot_retention_days": 3,
     }
 
 
@@ -624,6 +626,78 @@ async def test_coordinator_update_failure_makes_entities_unavailable(
 
         # Entities should now be unavailable
         assert hass.states.get(camera_ids[0]).state == "unavailable"
+
+
+async def test_snapshot_retention_cleanup(hass: HomeAssistant) -> None:
+    """Test that expired snapshots are cleaned up correctly."""
+    from datetime import datetime, timezone, timedelta
+    import os
+    from custom_components.tja470_intercom import (
+        async_cleanup_expired_snapshots,
+        async_get_call_history,
+        async_save_call_history,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={"snapshot_retention_days": 3},
+    )
+    entry.add_to_hass(hass)
+
+    # Mock snapshots directory and files
+    snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
+    os.makedirs(snapshots_dir, exist_ok=True)
+
+    # 1. Old call (5 days ago) with 1 snapshot
+    old_call_time = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat().replace("+00:00", "Z")
+    old_call_id = "11111111_old"
+    old_file_path = os.path.join(snapshots_dir, f"snapshot_{old_call_id}_0.jpg")
+    with open(old_file_path, "wb") as f:
+        f.write(b"old_image")
+
+    # 2. Recent call (1 day ago) with 1 snapshot
+    recent_call_time = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+    recent_call_id = "22222222_recent"
+    recent_file_path = os.path.join(snapshots_dir, f"snapshot_{recent_call_id}_0.jpg")
+    with open(recent_file_path, "wb") as f:
+        f.write(b"recent_image")
+
+    history = [
+        {
+            "id": old_call_id,
+            "timestamp": old_call_time,
+            "caller": "6001",
+            "caller_name": "Old",
+            "answered": True,
+            "snapshots_count": 1,
+        },
+        {
+            "id": recent_call_id,
+            "timestamp": recent_call_time,
+            "caller": "6002",
+            "caller_name": "Recent",
+            "answered": True,
+            "snapshots_count": 1,
+        }
+    ]
+
+    await async_save_call_history(hass, history)
+
+    # Run cleanup
+    await async_cleanup_expired_snapshots(hass, entry)
+
+    # Verify old snapshot is deleted and history is updated
+    assert not os.path.exists(old_file_path)
+    # Verify recent snapshot is kept
+    assert os.path.exists(recent_file_path)
+
+    updated_history = await async_get_call_history(hass)
+    assert updated_history[0]["snapshots_count"] == 0
+    assert updated_history[1]["snapshots_count"] == 1
+
+    # Cleanup recent file
+    if os.path.exists(recent_file_path):
+        os.remove(recent_file_path)
 
 
 

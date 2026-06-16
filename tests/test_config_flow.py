@@ -311,3 +311,32 @@ async def test_reauth_flow_invalid_auth(hass: HomeAssistant) -> None:
         assert result2["type"] == data_entry_flow.FlowResultType.FORM
         assert result2["step_id"] == "reauth_confirm"
         assert result2["errors"] == {"base": "invalid_auth"}
+
+
+async def test_options_flow(hass: HomeAssistant) -> None:
+    """Test options flow configuring snapshot retention."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "192.168.42.2",
+            CONF_USERNAME: "old_user",
+            CONF_PASSWORD: "old_pwd",
+            "uuid": "some-uuid",
+        },
+        options={"notify_devices": []},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "notify_devices_text": "",
+            "snapshot_retention_days": 5,
+        },
+    )
+    assert result2["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.options["snapshot_retention_days"] == 5
