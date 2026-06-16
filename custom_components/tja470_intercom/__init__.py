@@ -79,7 +79,8 @@ class TJA470SnapshotView(HomeAssistantView):
         if not os.path.abspath(file_path).startswith(os.path.abspath(snapshots_dir)):
             return web.Response(status=403, text="Forbidden")
 
-        if not os.path.exists(file_path):
+        exists = await hass.async_add_executor_job(os.path.exists, file_path)
+        if not exists:
             return web.Response(status=404, text="Not Found")
 
         return web.FileResponse(file_path)
@@ -122,23 +123,27 @@ async def async_cleanup_expired_snapshots(hass: HomeAssistant, entry: ConfigEntr
 
     snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
 
-    for h_entry in history:
-        snapshots_count = h_entry.get("snapshots_count", 0)
-        if snapshots_count > 0:
-            try:
-                entry_time = datetime.fromisoformat(h_entry["timestamp"])
-                if entry_time < cutoff:
-                    for idx in range(snapshots_count):
-                        file_path = os.path.join(snapshots_dir, f"snapshot_{h_entry['id']}_{idx}.jpg")
-                        if os.path.exists(file_path):
-                            try:
-                                os.remove(file_path)
-                            except Exception as err:
-                                LOGGER.error("Failed to delete expired snapshot file %s: %s", file_path, err)
-                    h_entry["snapshots_count"] = 0
-                    updated = True
-            except (ValueError, KeyError) as err:
-                LOGGER.error("Failed to parse history entry timestamp or id: %s", err)
+    def clean_snapshots_sync() -> None:
+        nonlocal updated
+        for h_entry in history:
+            snapshots_count = h_entry.get("snapshots_count", 0)
+            if snapshots_count > 0:
+                try:
+                    entry_time = datetime.fromisoformat(h_entry["timestamp"])
+                    if entry_time < cutoff:
+                        for idx in range(snapshots_count):
+                            file_path = os.path.join(snapshots_dir, f"snapshot_{h_entry['id']}_{idx}.jpg")
+                            if os.path.exists(file_path):
+                                try:
+                                    os.remove(file_path)
+                                except Exception as err:
+                                    LOGGER.error("Failed to delete expired snapshot file %s: %s", file_path, err)
+                        h_entry["snapshots_count"] = 0
+                        updated = True
+                except (ValueError, KeyError) as err:
+                    LOGGER.error("Failed to parse history entry timestamp or id: %s", err)
+
+    await hass.async_add_executor_job(clean_snapshots_sync)
 
     if updated:
         await async_save_call_history(hass, history)
@@ -174,11 +179,14 @@ async def websocket_clear_call_history(
     """Handle clear_call_history websocket command."""
     import os, shutil
     snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
-    if os.path.exists(snapshots_dir):
-        try:
+    def clear_snapshots_sync() -> None:
+        if os.path.exists(snapshots_dir):
             shutil.rmtree(snapshots_dir)
-        except Exception as err:
-            LOGGER.error("Error deleting snapshots dir: %s", err)
+
+    try:
+        await hass.async_add_executor_job(clear_snapshots_sync)
+    except Exception as err:
+        LOGGER.error("Error deleting snapshots dir: %s", err)
     await async_save_call_history(hass, [])
     connection.send_result(msg["id"])
 
@@ -227,7 +235,7 @@ async def async_register_and_track_incoming_call(
 
     async def capture_snapshots() -> None:
         snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
-        os.makedirs(snapshots_dir, exist_ok=True)
+        await hass.async_add_executor_job(os.makedirs, snapshots_dir, 0o777, True)
 
         # Give the intercom camera RTSP stream time to boot up after the ring starts
         await asyncio.sleep(1.5)
@@ -260,8 +268,10 @@ async def async_register_and_track_incoming_call(
                 image_bytes = await camera_entity.async_camera_image()
                 if image_bytes:
                     file_path = os.path.join(snapshots_dir, f"snapshot_{call_id}_{idx}.jpg")
-                    with open(file_path, "wb") as f:
-                        f.write(image_bytes)
+                    def save_image() -> None:
+                        with open(file_path, "wb") as f:
+                            f.write(image_bytes)
+                    await hass.async_add_executor_job(save_image)
                     captured += 1
 
                     current_history = await async_get_call_history(hass)
