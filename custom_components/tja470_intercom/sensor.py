@@ -145,3 +145,17 @@ class TJA470Sensor(CoordinatorEntity[TJA470Coordinator], SensorEntity):
     def native_value(self) -> str | None:
         """Return the native value of the sensor."""
         return self.entity_description.value_fn(self.coordinator.data, self.coordinator.entry)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if self.entity_description.key == "call_state":
+            try:
+                runtime = self.coordinator.entry.runtime_data
+                return {
+                    "active_call_id": runtime.active_call_id,
+                    "active_call_snapshots": runtime.active_call_snapshots,
+                }
+            except AttributeError:
+                pass
+        return None

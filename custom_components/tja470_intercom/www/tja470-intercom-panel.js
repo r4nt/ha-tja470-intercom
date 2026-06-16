@@ -1,5 +1,5 @@
 if (!customElements.get('tja470-intercom-card')) {
-  import('/tja470-intercom/tja470-intercom-card.js?v=1.3.0');
+  import('/tja470-intercom/tja470-intercom-card.js?v=1.3.1');
 }
 
 class TJA470IntercomPanel extends HTMLElement {

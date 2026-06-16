@@ -48,6 +48,8 @@ class TJA470RuntimeData:
     coordinator: TJA470Coordinator
     sip_phone: TJA470SipPhone
     active_call: Any = field(default=None)
+    active_call_id: str | None = field(default=None)
+    active_call_snapshots: int = field(default=0)
 
 
 class TJA470SnapshotView(HomeAssistantView):
@@ -176,6 +178,8 @@ async def async_register_and_track_incoming_call(
     await async_save_call_history(hass, history)
 
     entry.runtime_data.active_call = call
+    entry.runtime_data.active_call_id = call_id
+    entry.runtime_data.active_call_snapshots = 0
 
     from homeassistant.helpers.dispatcher import async_dispatcher_send
     async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
@@ -183,6 +187,9 @@ async def async_register_and_track_incoming_call(
     async def capture_snapshots() -> None:
         snapshots_dir = os.path.join(hass.config.config_dir, ".storage", "tja470_snapshots")
         os.makedirs(snapshots_dir, exist_ok=True)
+
+        # Give the intercom camera RTSP stream time to boot up after the ring starts
+        await asyncio.sleep(1.5)
 
         camera_entity = None
         from homeassistant.helpers import entity_registry as er
@@ -223,6 +230,7 @@ async def async_register_and_track_incoming_call(
                             break
                     await async_save_call_history(hass, current_history)
 
+                    entry.runtime_data.active_call_snapshots = captured
                     async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
             except Exception as err:
                 LOGGER.error("Error capturing call snapshot index %d: %s", idx, err)
@@ -501,6 +509,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     ) from err
                 finally:
                     runtime.active_call = None
+                    runtime.active_call_id = None
+                    runtime.active_call_snapshots = 0
                     from homeassistant.helpers.dispatcher import async_dispatcher_send
                     async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
 
@@ -557,12 +567,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     rt = _get_runtime(entry_id)
                     if rt and rt.active_call == outgoing_call:
                         rt.active_call = None
+                        rt.active_call_id = None
+                        rt.active_call_snapshots = 0
                     async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
 
                 hass.async_create_task(monitor_call())
             except Exception as err:
                 if runtime.active_call == placeholder:
                     runtime.active_call = None
+                    runtime.active_call_id = None
+                    runtime.active_call_snapshots = 0
                     async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -610,6 +624,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 rt = _get_runtime(entry_id)
                 if rt and rt.active_call == mock_call:
                     rt.active_call = None
+                    rt.active_call_id = None
+                    rt.active_call_snapshots = 0
                 async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_call_update")
 
             hass.async_create_task(monitor_call())
@@ -700,7 +716,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
         if not resources.loaded:
             await resources.async_load()
 
-        url = "/tja470-intercom/tja470-intercom-card.js?v=1.3.0"
+        url = "/tja470-intercom/tja470-intercom-card.js?v=1.3.1"
         for item in resources.async_items():
             if item.get("url", "").startswith("/tja470-intercom/tja470-intercom-card.js"):
                 if item.get("url") != url:
@@ -727,7 +743,7 @@ async def async_register_custom_panel(hass: HomeAssistant) -> None:
         webcomponent_name="tja470-intercom-panel",
         sidebar_title="Intercom",
         sidebar_icon="mdi:phone-in-talk",
-        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.3.0",
+        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.3.1",
         require_admin=False,
     )
 
@@ -812,6 +828,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             LOGGER.info("SIP call ended: %s", call)
             if entry.runtime_data.active_call == call:
                 entry.runtime_data.active_call = None
+                entry.runtime_data.active_call_id = None
+                entry.runtime_data.active_call_snapshots = 0
             async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
 
         hass.async_create_task(monitor_call())

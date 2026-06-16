@@ -387,7 +387,7 @@ class TJA470IntercomCard extends HTMLElement {
         flex-direction: column;
         gap: 6px;
         margin-top: 6px;
-        max-height: 250px;
+        max-height: 500px;
         overflow-y: auto;
       }
       .history-item {
@@ -442,8 +442,8 @@ class TJA470IntercomCard extends HTMLElement {
       .history-snapshot-img {
         width: 100%;
         border-radius: 4px;
-        max-height: 150px;
-        object-fit: cover;
+        max-height: 250px;
+        object-fit: contain;
         background: #000;
       }
       .history-carousel-controls {
