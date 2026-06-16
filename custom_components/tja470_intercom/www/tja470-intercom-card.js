@@ -642,25 +642,26 @@ class TJA470IntercomCard extends HTMLElement {
       this._currentEntityId = entityId;
     }
     if (this._elements.stream) {
-      this._elements.stream.hass = this._hass;
-      if (this._elements.stream.stateObj !== stateObj) {
-        this._elements.stream.stateObj = stateObj;
-      }
-    }
-
-    if (isOffline) {
-      this._elements.placeholder.classList.remove('hidden');
-      const icon = this._elements.placeholder.querySelector('ha-icon');
-      const span = this._elements.placeholder.querySelector('span');
-      if (icon) icon.setAttribute('icon', 'mdi:camera-off');
-      if (span) span.textContent = 'Camera Offline';
-      if (this._elements.stream) {
+      if (isOffline) {
+        this._elements.placeholder.classList.remove('hidden');
+        const icon = this._elements.placeholder.querySelector('ha-icon');
+        const span = this._elements.placeholder.querySelector('span');
+        if (icon) icon.setAttribute('icon', 'mdi:camera-off');
+        if (span) span.textContent = 'Camera Offline';
         this._elements.stream.classList.add('hidden');
-      }
-    } else {
-      this._elements.placeholder.classList.add('hidden');
-      if (this._elements.stream) {
+        if (this._elements.stream.parentNode) {
+          this._elements.stream.parentNode.removeChild(this._elements.stream);
+        }
+      } else {
+        this._elements.placeholder.classList.add('hidden');
         this._elements.stream.classList.remove('hidden');
+        if (!this._elements.stream.parentNode) {
+          this._elements.feedContainer.appendChild(this._elements.stream);
+        }
+        this._elements.stream.hass = this._hass;
+        if (this._elements.stream.stateObj !== stateObj) {
+          this._elements.stream.stateObj = stateObj;
+        }
       }
     }
 

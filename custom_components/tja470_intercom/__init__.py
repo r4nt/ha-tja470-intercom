@@ -767,7 +767,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
         if not resources.loaded:
             await resources.async_load()
 
-        url = "/tja470-intercom/tja470-intercom-card.js?v=1.3.2"
+        url = "/tja470-intercom/tja470-intercom-card.js?v=1.3.4"
         for item in resources.async_items():
             if item.get("url", "").startswith("/tja470-intercom/tja470-intercom-card.js"):
                 if item.get("url") != url:
@@ -794,7 +794,7 @@ async def async_register_custom_panel(hass: HomeAssistant) -> None:
         webcomponent_name="tja470-intercom-panel",
         sidebar_title="Intercom",
         sidebar_icon="mdi:phone-in-talk",
-        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.3.2",
+        module_url="/tja470-intercom/tja470-intercom-panel.js?v=1.3.4",
         require_admin=False,
     )
 
@@ -907,6 +907,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             translation_key="sip_phone_failed",
             translation_placeholders={"host": host},
         )
+
+    from homeassistant.components import websocket_api
+    websocket_api.async_register_command(hass, websocket_get_call_history)
+    websocket_api.async_register_command(hass, websocket_clear_call_history)
 
     if "websocket_view_registered" not in hass.data[DOMAIN]:
         hass.http.register_view(TJA470AudioStreamView())
