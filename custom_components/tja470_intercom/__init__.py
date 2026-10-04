@@ -780,7 +780,7 @@ async def async_register_lovelace_resource(hass: HomeAssistant) -> None:
     www_dir = os.path.join(os.path.dirname(__file__), "www")
 
     if hasattr(hass, "http"):
-        from homeassistant.components.http import StaticPathConfig
+        from homeassistant.components.http.server import StaticPathConfig
         await hass.http.async_register_static_paths([
             StaticPathConfig("/tja470-intercom", www_dir, False)
         ])

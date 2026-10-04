@@ -322,11 +322,8 @@ class TJA470OptionsFlowHandler(config_entries.OptionsFlow):
             target_service = f"notify.{slugify(f'mobile_app_{raw_device_name}')}"
 
             # Find matching device in device registry
-            device_entry = None
-            for dev in dev_reg.devices.values():
-                if entry.entry_id in dev.config_entries:
-                    device_entry = dev
-                    break
+            device_entries = dr.async_entries_for_config_entry(dev_reg, entry.entry_id)
+            device_entry = device_entries[0] if device_entries else None
 
             # Find device_tracker entity ID
             tracker_entity = None
