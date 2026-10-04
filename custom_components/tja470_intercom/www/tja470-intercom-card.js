@@ -541,6 +541,16 @@ class TJA470IntercomCard extends HTMLElement {
     this._elements.switchBtn = switchBtn;
     controls.appendChild(switchBtn);
 
+    const cameraOnBtn = document.createElement('button');
+    cameraOnBtn.className = 'btn btn-switch';
+    const cameraOnIcon = document.createElement('ha-icon');
+    cameraOnIcon.setAttribute('icon', 'mdi:camera');
+    cameraOnBtn.appendChild(cameraOnIcon);
+    cameraOnBtn.appendChild(document.createTextNode('On'));
+    cameraOnBtn.onclick = () => this._handleCameraOn(cameraOnBtn);
+    this._elements.cameraOnBtn = cameraOnBtn;
+    controls.appendChild(cameraOnBtn);
+
     const hangupBtn = document.createElement('button');
     hangupBtn.className = 'btn btn-decline';
     const hangupIcon = document.createElement('ha-icon');
@@ -686,24 +696,28 @@ class TJA470IntercomCard extends HTMLElement {
 
     if (callState === 'ringing') {
       this._elements.switchBtn.classList.add('hidden');
+      this._elements.cameraOnBtn.classList.add('hidden');
       this._elements.answerBtn.classList.remove('hidden');
       this._elements.hangupSpan.textContent = 'Decline';
       this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else if (callState === 'dialing') {
       this._elements.switchBtn.classList.add('hidden');
+      this._elements.cameraOnBtn.classList.add('hidden');
       this._elements.answerBtn.classList.add('hidden');
       this._elements.hangupSpan.textContent = 'Cancel';
       this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else if (callState === 'answered') {
       this._elements.switchBtn.classList.add('hidden');
+      this._elements.cameraOnBtn.classList.add('hidden');
       this._elements.answerBtn.classList.add('hidden');
       this._elements.hangupSpan.textContent = 'Hang Up';
       this._elements.hangupIcon.setAttribute('icon', 'mdi:phone-hangup');
       this._elements.hangupBtn.classList.remove('hidden');
     } else {
       this._elements.switchBtn.classList.remove('hidden');
+      this._elements.cameraOnBtn.classList.remove('hidden');
       this._elements.answerBtn.classList.add('hidden');
       this._elements.hangupBtn.classList.add('hidden');
     }
@@ -1120,6 +1134,17 @@ class TJA470IntercomCard extends HTMLElement {
     this._runActionButton(
       buttonEl,
       this._hass.callService('button', 'press', { entity_id: switchBtn })
+    );
+  }
+
+  _handleCameraOn(buttonEl) {
+    const entityId = this._resolvedEntityId || this._config.entity;
+    const cameraOnBtn = this._config.camera_on_button ||
+      entityId.replace(/_camera$/, '_camera_on').replace(/^camera\./, 'button.');
+    this._currentToken = null;
+    this._runActionButton(
+      buttonEl,
+      this._hass.callService('button', 'press', { entity_id: cameraOnBtn })
     );
   }
 }

@@ -67,6 +67,7 @@ Copy the `custom_components/tja470_intercom` directory into your HA `config/cust
 | `camera.tja470_intercom_…_camera` | Camera | Live MJPEG/RTSP stream |
 | `button.tja470_intercom_…_open_active_door` | Button | Release the currently active door |
 | `button.tja470_intercom_…_switch_camera` | Button | Cycle to the next camera position |
+| `button.tja470_intercom_…_camera_on` | Button | Turn on the current camera's video (the stream shows an idle placeholder otherwise) |
 | `button.<door_name>_open` | Button | Release a specific door station (one per station) |
 | `sensor.…_sip_registrar` | Sensor (diagnostic) | IP address used as SIP registrar |
 | `sensor.…_rtsp_stream_url` | Sensor (diagnostic) | Full RTSP stream URL |

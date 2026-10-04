@@ -159,3 +159,15 @@ async def test_platforms(hass: HomeAssistant) -> None:
             blocking=True,
         )
         mock_client.switch_camera.assert_called_once_with("some-uuid")
+
+        # Action: Press the Camera on button
+        camera_on_btn = next((eid for eid in states if eid.endswith("camera_on")), None)
+        assert camera_on_btn is not None
+        mock_client.get_current_camera = AsyncMock(return_value=0)
+        await hass.services.async_call(
+            "button",
+            SERVICE_PRESS,
+            {ATTR_ENTITY_ID: camera_on_btn},
+            blocking=True,
+        )
+        mock_client.get_current_camera.assert_called_once_with("some-uuid")

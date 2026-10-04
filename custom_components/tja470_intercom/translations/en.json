@@ -77,6 +77,9 @@
       },
       "switch_camera": {
         "name": "Switch Camera"
+      },
+      "camera_on": {
+        "name": "Camera on"
       }
     },
     "sensor": {

@@ -33,6 +33,7 @@ async def async_setup_entry(
     entities: list[ButtonEntity] = [
         TJA470OpenActiveDoorButton(coordinator, client),
         TJA470SwitchCameraButton(coordinator, client),
+        TJA470CameraOnButton(coordinator, client),
     ]
     for element in prov.called_elements:
         if element.order is not None:
@@ -127,6 +128,37 @@ class TJA470SwitchCameraButton(CoordinatorEntity[TJA470Coordinator], ButtonEntit
         position = await self.client.switch_camera(uuid_str)
         LOGGER.debug("Switch camera request completed: new position=%s", position)
         await self.coordinator.async_request_refresh()
+
+
+class TJA470CameraOnButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
+    """Button to turn on the video of the current camera.
+
+    The RTSP stream shows an idle placeholder until the camera is turned on,
+    e.g. by a doorbell call or a camera switch.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "camera_on"
+
+    def __init__(
+        self,
+        coordinator: TJA470Coordinator,
+        client: TJA470IntercomClient,
+    ) -> None:
+        """Initialize button."""
+        super().__init__(coordinator)
+        self.client = client
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_camera_on"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+        )
+
+    async def async_press(self) -> None:
+        """Press the button."""
+        uuid_str = self.coordinator.entry.data[CONF_UUID]
+        LOGGER.debug("Camera on button pressed")
+        position = await self.client.get_current_camera(uuid_str)
+        LOGGER.debug("Camera on request completed: position=%s", position)
 
 
 class TJA470OpenDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
