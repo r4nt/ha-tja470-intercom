@@ -96,8 +96,8 @@ class TJA470OpenActiveDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEnt
 
     async def async_press(self) -> None:
         """Press the button."""
-        LOGGER.debug("Open active door button pressed: door_id=1")
-        await self.client.open_door(door_id=1)
+        LOGGER.debug("Open active door button pressed")
+        await self.client.open_door()
         LOGGER.debug("Open active door request completed")
 
 
@@ -167,6 +167,6 @@ class TJA470OpenDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
             self.element.order,
         )
         await self.client.open_door_at_position(
-            uuid_str, self.element.order, door_id=1
+            uuid_str, self.element.order
         )
         LOGGER.debug("Open door request completed: sip_id=%s", self.element.sip_id)

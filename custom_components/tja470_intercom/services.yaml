@@ -10,12 +10,12 @@ open_door:
           integration: tja470_intercom
     door_id:
       name: Door ID
-      description: The door release ID.
-      default: 1
+      description: The door release ID. Defaults to this client's own SIP ID, as the official app sends.
       selector:
         number:
           min: 1
-          max: 10
+          max: 99999
+          mode: box
 
 open_door_at_position:
   name: Open Door at Position
@@ -37,12 +37,12 @@ open_door_at_position:
           max: 10
     door_id:
       name: Door ID
-      description: The door release ID.
-      default: 1
+      description: The door release ID. Defaults to this client's own SIP ID, as the official app sends.
       selector:
         number:
           min: 1
-          max: 10
+          max: 99999
+          mode: box
     max_attempts:
       name: Max Switch Attempts
       description: Maximum camera switches to perform before giving up.

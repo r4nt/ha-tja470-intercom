@@ -410,7 +410,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async def handle_open_door(call: ServiceCall) -> None:
         device_ids = call.data.get("device_id", [])
-        door_id = call.data.get("door_id", 1)
+        door_id = call.data.get("door_id")
         clients = await _resolve_clients(device_ids)
         if not clients:
             raise ServiceValidationError(
@@ -431,7 +431,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async def handle_open_door_at_position(call: ServiceCall) -> None:
         device_ids = call.data.get("device_id", [])
         position = call.data["position"]
-        door_id = call.data.get("door_id", 1)
+        door_id = call.data.get("door_id")
         max_attempts = call.data.get("max_attempts", 10)
         clients = await _resolve_clients(device_ids)
         if not clients:
@@ -704,7 +704,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         DOMAIN, SERVICE_OPEN_DOOR, handle_open_door,
         schema=vol.Schema({
             vol.Optional("device_id"): vol.All(cv.ensure_list, [cv.string]),
-            vol.Optional("door_id", default=1): cv.positive_int,
+            vol.Optional("door_id"): cv.positive_int,
         }),
     )
     hass.services.async_register(
@@ -712,7 +712,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         schema=vol.Schema({
             vol.Optional("device_id"): vol.All(cv.ensure_list, [cv.string]),
             vol.Required("position"): cv.positive_int,
-            vol.Optional("door_id", default=1): cv.positive_int,
+            vol.Optional("door_id"): cv.positive_int,
             vol.Optional("max_attempts", default=10): cv.positive_int,
         }),
     )

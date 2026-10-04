@@ -106,6 +106,16 @@ async def test_services(hass: HomeAssistant) -> None:
         )
         mock_client.open_door.assert_called_once_with(door_id=2)
 
+        # Without door_id, the library's default (the client's own SIP ID) is used
+        mock_client.open_door.reset_mock()
+        await hass.services.async_call(
+            DOMAIN,
+            "open_door",
+            {},
+            blocking=True,
+        )
+        mock_client.open_door.assert_called_once_with(door_id=None)
+
         # Call open_door_at_position service
         await hass.services.async_call(
             DOMAIN,

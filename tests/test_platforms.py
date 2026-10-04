@@ -136,7 +136,7 @@ async def test_platforms(hass: HomeAssistant) -> None:
             {ATTR_ENTITY_ID: open_active_btn},
             blocking=True,
         )
-        mock_client.open_door.assert_called_once_with(door_id=1)
+        mock_client.open_door.assert_called_once_with()
 
         # Action: Press the specific Door Release button (Driveway)
         await hass.services.async_call(
@@ -146,7 +146,7 @@ async def test_platforms(hass: HomeAssistant) -> None:
             blocking=True,
         )
         mock_client.open_door_at_position.assert_called_once_with(
-            "some-uuid", 0, door_id=1
+            "some-uuid", 0
         )
 
         # Action: Press the Switch Camera button
