@@ -1,5 +1,5 @@
 pytest-homeassistant-custom-component
-aiotja470-intercom==0.1.7
+aiotja470-intercom==0.1.8
 ha-ffmpeg
 home-assistant-frontend
 PyTurboJPEG
