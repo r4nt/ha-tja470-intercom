@@ -94,6 +94,12 @@
       },
       "caller": {
         "name": "Caller"
+      },
+      "firmware_version": {
+        "name": "Firmware version"
+      },
+      "software_version": {
+        "name": "Doorphone software version"
       }
     }
   },
@@ -127,6 +133,17 @@
     "sip_phone_failed": {
       "title": "SIP phone failed to start",
       "description": "The SIP phone for the TJA470 Intercom at {host} failed to start. Incoming calls will not be received. Check your network configuration and reload the integration to retry."
+    },
+    "device_updated": {
+      "title": "TJA470 was updated",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "TJA470 was updated",
+            "description": "The TJA470 Intercom at {host} was updated ({changes}). After an update, the device has been seen to lose its connection to the doorbell bus: the doorbell no longer rings in Home Assistant, the camera stays black after switching, and opening the door has no effect, while the wired indoor units keep working.\\n\\nCheck that ringing the doorbell and switching the camera still work. If they don't, power-cycle the supply of the 2-wire doorbell bus (restarting the TJA470 alone does not help).\\n\\nSubmit once everything works."
+          }
+        }
+      }
     }
   }
 }

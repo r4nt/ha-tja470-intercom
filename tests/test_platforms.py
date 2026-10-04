@@ -29,6 +29,7 @@ async def test_platforms(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     mock_client = MagicMock()
+    mock_client.get_software_version = AsyncMock(return_value="4.0.2")
     mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
     mock_client.get_provisioning = AsyncMock(
         return_value=ProvisioningInfo(

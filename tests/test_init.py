@@ -30,6 +30,7 @@ async def test_setup_unload_entry(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     mock_client = MagicMock()
+    mock_client.get_software_version = AsyncMock(return_value="4.0.2")
     mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
     mock_client.get_provisioning = AsyncMock(
         return_value=ProvisioningInfo(
@@ -74,6 +75,7 @@ async def test_services(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     mock_client = MagicMock()
+    mock_client.get_software_version = AsyncMock(return_value="4.0.2")
     mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
     mock_client.get_provisioning = AsyncMock(
         return_value=ProvisioningInfo(
@@ -282,6 +284,7 @@ async def test_call_services_and_stream(hass: HomeAssistant, mock_sip_phone) -> 
     entry.add_to_hass(hass)
 
     mock_client = MagicMock()
+    mock_client.get_software_version = AsyncMock(return_value="4.0.2")
     mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
     mock_client.get_provisioning = AsyncMock(
         return_value=ProvisioningInfo(
@@ -524,6 +527,7 @@ async def test_incoming_call_notification(hass: HomeAssistant, mock_sip_phone) -
     entry.add_to_hass(hass)
 
     mock_client = MagicMock()
+    mock_client.get_software_version = AsyncMock(return_value="4.0.2")
     mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
     from aiotja470_intercom.models import CalledElement
     mock_client.get_provisioning = AsyncMock(
@@ -604,6 +608,7 @@ async def test_coordinator_update_failure_makes_entities_unavailable(
     entry.add_to_hass(hass)
 
     mock_client = MagicMock()
+    mock_client.get_software_version = AsyncMock(return_value="4.0.2")
     mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
     mock_client.get_provisioning = AsyncMock(
         return_value=ProvisioningInfo(

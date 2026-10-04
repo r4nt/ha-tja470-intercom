@@ -6,3 +6,4 @@ LOGGER = logging.getLogger(__package__)
 
 CONF_UUID = "uuid"
 CONF_COOKIES = "cookies"
+CONF_KNOWN_VERSIONS = "known_versions"

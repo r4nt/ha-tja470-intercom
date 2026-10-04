@@ -71,6 +71,10 @@ Copy the `custom_components/tja470_intercom` directory into your HA `config/cust
 | `sensor.…_sip_registrar` | Sensor (diagnostic) | IP address used as SIP registrar |
 | `sensor.…_rtsp_stream_url` | Sensor (diagnostic) | Full RTSP stream URL |
 | `sensor.…_sip_registration_status` | Sensor (diagnostic) | SIP registration state |
+| `sensor.…_firmware_version` | Sensor (diagnostic) | TJA470 firmware version; a change raises a repair issue (see below) |
+| `sensor.…_doorphone_software_version` | Sensor (diagnostic) | TJA470 doorphone software version; a change raises a repair issue |
+
+When the TJA470's firmware or doorphone software version changes, Home Assistant shows a repair issue: after an automatic update, the TJA470 has been seen to lose its connection to the doorbell bus (no rings, black camera, door release without effect) until the bus supply is power-cycled.
 
 ## Services
 

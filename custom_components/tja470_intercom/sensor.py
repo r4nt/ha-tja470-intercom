@@ -84,6 +84,18 @@ SENSOR_DESCRIPTIONS: tuple[TJA470SensorEntityDescription, ...] = (
         value_fn=lambda data, entry: data.get("sip_status", "INACTIVE"),
     ),
     TJA470SensorEntityDescription(
+        key="firmware_version",
+        translation_key="firmware_version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, entry: data.get("firmware_version"),
+    ),
+    TJA470SensorEntityDescription(
+        key="software_version",
+        translation_key="software_version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, entry: data.get("software_version"),
+    ),
+    TJA470SensorEntityDescription(
         key="call_state",
         translation_key="call_state",
         value_fn=lambda data, entry: get_call_state_name(entry),
