@@ -53,13 +53,16 @@ async def async_setup_entry(
             if element.order is not None and element.sip_id not in known_sip_ids:
                 known_sip_ids.add(element.sip_id)
                 device_reg = dr.async_get(hass)
+                controller_device = device_reg.async_get_device(
+                    identifiers={(DOMAIN, entry.entry_id)}
+                )
                 device_reg.async_get_or_create(
                     config_entry_id=entry.entry_id,
                     identifiers={(DOMAIN, f"door_{element.sip_id}")},
                     name=element.name or f"Door Station {element.order}",
                     manufacturer="Hager",
                     model="TJA470 Door Station",
-                    via_device=(DOMAIN, entry.entry_id),
+                    via_device_id=controller_device.id if controller_device else None,
                 )
                 new_entities.append(TJA470OpenDoorButton(coordinator, client, element))
         if new_entities:

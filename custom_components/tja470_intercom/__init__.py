@@ -249,18 +249,16 @@ async def async_register_and_track_incoming_call(
         # Give the intercom camera RTSP stream time to boot up after the ring starts
         await asyncio.sleep(1.5)
 
-        camera_entity = None
+        from homeassistant.components.camera import async_get_image
         from homeassistant.helpers import entity_registry as er
         ent_reg = er.async_get(hass)
         camera_eid = next(
-            (e.entity_id for e in ent_reg.entities.values()
-             if e.config_entry_id == entry.entry_id and e.domain == "camera"),
+            (e.entity_id for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+             if e.domain == "camera"),
             None
         )
-        if camera_eid:
-            camera_entity = hass.data["entity_components"]["camera"].get_entity(camera_eid)
 
-        if not camera_entity:
+        if not camera_eid:
             LOGGER.warning("Camera entity not found, cannot capture snapshots")
             return
 
@@ -274,7 +272,7 @@ async def async_register_and_track_incoming_call(
                 break
 
             try:
-                image_bytes = await camera_entity.async_camera_image()
+                image_bytes = (await async_get_image(hass, camera_eid)).content
                 if image_bytes:
                     file_path = os.path.join(snapshots_dir, f"snapshot_{call_id}_{idx}.jpg")
                     def save_image() -> None:
@@ -292,6 +290,8 @@ async def async_register_and_track_incoming_call(
 
                     entry.runtime_data.active_call_snapshots = captured
                     async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_call_update")
+            except HomeAssistantError as err:
+                LOGGER.warning("No call snapshot available for index %d: %s", idx, err)
             except Exception as err:
                 LOGGER.error("Error capturing call snapshot index %d: %s", idx, err)
 
@@ -926,7 +926,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN]["websocket_view_registered"] = True
 
     device_registry = dr.async_get(hass)
-    device_registry.async_get_or_create(
+    controller_device = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.entry_id)},
         name=f"TJA470 Intercom Controller ({host})",
@@ -942,7 +942,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 name=element.name or f"Door Station {element.order}",
                 manufacturer="Hager",
                 model="TJA470 Door Station",
-                via_device=(DOMAIN, entry.entry_id),
+                via_device_id=controller_device.id,
             )
 
     from homeassistant.core import callback
