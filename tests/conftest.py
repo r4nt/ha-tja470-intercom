@@ -29,3 +29,14 @@ def mock_sip_phone():
         yield mock_phone
 
 
+
+
+@pytest.fixture(autouse=True)
+def mock_event_listener():
+    """Don't run the event bus listener; tests for it call it directly."""
+    from unittest.mock import AsyncMock
+    with patch(
+        "custom_components.tja470_intercom.async_listen_for_events",
+        new=AsyncMock(),
+    ) as mock_listener:
+        yield mock_listener

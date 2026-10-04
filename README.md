@@ -97,6 +97,8 @@ You can configure the integration to send a push notification to one or more Hom
 1. Go to **Settings → Integrations → Hager TJA470 Intercom → Configure**
 2. Select the mobile devices to notify — the list is auto-populated from installed companion apps and sorted by most recently seen
 
+The notification is sent as soon as the TJA470 reports the ring on its event bus, about 1.6 s before the SIP call arrives. At that point the device doesn't say which door station is ringing, so the notification reads "Someone is ringing at the door". If the event bus is not connected, the notification is sent when the SIP call arrives and names the door station.
+
 ### Configuration parameters
 
 | Parameter | Description |

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -25,6 +26,8 @@ from aiotja470_intercom.exceptions import TJA470AuthError, TJA470Error
 
 from .const import CONF_COOKIES, CONF_UUID, DOMAIN, LOGGER
 from .coordinator import TJA470Coordinator
+from .events import async_listen_for_events
+from .notifications import async_send_call_notifications
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -39,6 +42,10 @@ SERVICE_HANGUP_CALL = "hangup_call"
 SERVICE_INITIATE_CALL = "initiate_call"
 SERVICE_TRIGGER_INCOMING_RING = "trigger_incoming_ring"
 
+# A SIP call within this many seconds of a ring notification from the event
+# bus belongs to the same ring and is not notified again.
+RING_NOTIFICATION_WINDOW = 30.0
+
 
 @dataclass
 class TJA470RuntimeData:
@@ -50,6 +57,8 @@ class TJA470RuntimeData:
     active_call: Any = field(default=None)
     active_call_id: str | None = field(default=None)
     active_call_snapshots: int = field(default=0)
+    # time.monotonic() of the last ring notification sent from the event bus
+    ring_notified_at: float | None = field(default=None)
 
 
 class TJA470SnapshotView(HomeAssistantView):
@@ -859,37 +868,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         call.is_outgoing = False
         await async_register_and_track_incoming_call(hass, entry, call)
 
-        async def send_notifications() -> None:
-            notify_devices = entry.options.get("notify_devices", [])
-            if not notify_devices:
-                return
+        notified_at = entry.runtime_data.ring_notified_at
+        if notified_at is not None and time.monotonic() - notified_at < RING_NOTIFICATION_WINDOW:
+            LOGGER.debug("Ring was already notified from the event bus")
+        else:
             caller_name = call.caller
             if coordinator.data and "provisioning" in coordinator.data:
                 for element in coordinator.data["provisioning"].called_elements:
                     if element.sip_id == call.caller and element.name:
                         caller_name = element.name
                         break
-            for device in notify_devices:
-                service_name = device if not device.startswith("notify.") else device[7:]
-                LOGGER.debug("Sending call notification via service notify.%s", service_name)
-                try:
-                    await hass.services.async_call(
-                        "notify", service_name,
-                        {
-                            "title": "Intercom Call",
-                            "message": f"Incoming call from {caller_name}",
-                            "data": {
-                                "ttl": 0,
-                                "priority": "high",
-                                "channel": "Intercom",
-                                "clickAction": "/intercom",
-                            },
-                        },
-                    )
-                except Exception as err:
-                    LOGGER.error("Failed to send notification to %s: %s", device, err)
-
-        hass.async_create_task(send_notifications())
+            hass.async_create_task(async_send_call_notifications(hass, entry, caller_name))
 
         async def monitor_call() -> None:
             from pyVoIP.VoIP import CallState
@@ -976,6 +965,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(coordinator.async_add_listener(_async_remove_stale_door_devices))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    entry.async_create_background_task(
+        hass, async_listen_for_events(hass, entry), "tja470_event_listener"
+    )
 
     # Clean up expired snapshots on startup
     hass.async_create_background_task(

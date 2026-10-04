@@ -717,3 +717,66 @@ async def test_snapshot_retention_cleanup(hass: HomeAssistant) -> None:
 
 
 
+
+
+async def test_sip_call_after_event_ring_is_not_notified_again(
+    hass: HomeAssistant, mock_sip_phone, mock_event_listener
+) -> None:
+    """A SIP call shortly after the event bus reported the ring sends no second notification."""
+    import time
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "host": "192.168.42.2",
+            "username": "manuel",
+            "password": "pwd",
+            CONF_UUID: "some-uuid",
+        },
+        options={"notify_devices": ["mobile_app_phone1"]},
+    )
+    entry.add_to_hass(hass)
+
+    mock_client = MagicMock()
+    mock_client.get_software_version = AsyncMock(return_value="4.0.2")
+    mock_client.get_manifest = AsyncMock(return_value=Manifest(raw_data={"fw": "2.7.3"}))
+    mock_client.get_provisioning = AsyncMock(
+        return_value=ProvisioningInfo(
+            sip_info=SipInfo(sip_id="6004", sip_password="pwd"),
+            rtsp_video_url="rtsp://some_url",
+            http_video_url="http://some_http_url",
+            local_ip_address="192.168.42.2",
+            door_release_allowed=True,
+        )
+    )
+    mock_client.get_cookies = MagicMock(return_value={})
+
+    with patch(
+        "custom_components.tja470_intercom.TJA470IntercomClient",
+        return_value=mock_client,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        mock_event_listener.assert_called_once_with(hass, entry)
+
+        calls = []
+
+        @callback
+        def record_call(service_call):
+            calls.append(service_call)
+
+        hass.services.async_register("notify", "mobile_app_phone1", record_call)
+
+        from pyVoIP.VoIP import CallState
+        incoming_callback = mock_sip_phone.register_incoming_call_callback.call_args[0][0]
+        mock_call = MagicMock()
+        mock_call.caller = "6001"
+        mock_call.state = CallState.RINGING
+
+        entry.runtime_data.ring_notified_at = time.monotonic()
+        await incoming_callback(mock_call)
+        mock_call.state = CallState.ENDED
+        await hass.async_block_till_done()
+
+        assert calls == []
