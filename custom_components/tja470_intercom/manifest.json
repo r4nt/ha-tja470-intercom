@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/r4nt/ha-tja470-intercom/issues",
   "loggers": ["aiotja470_intercom"],
   "requirements": ["aiotja470-intercom==0.1.8"],
-  "version": "0.0.12"
+  "version": "0.0.13"
 }
