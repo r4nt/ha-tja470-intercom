@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from aiotja470_intercom import TJA470IntercomClient
 from aiotja470_intercom.models import CalledElement
 
-from .const import CONF_UUID, DOMAIN
+from .const import CONF_UUID, DOMAIN, LOGGER
 from .coordinator import TJA470Coordinator
 
 PARALLEL_UPDATES = 0
@@ -96,7 +96,9 @@ class TJA470OpenActiveDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEnt
 
     async def async_press(self) -> None:
         """Press the button."""
+        LOGGER.debug("Open active door button pressed: door_id=1")
         await self.client.open_door(door_id=1)
+        LOGGER.debug("Open active door request completed")
 
 
 class TJA470SwitchCameraButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
@@ -121,7 +123,9 @@ class TJA470SwitchCameraButton(CoordinatorEntity[TJA470Coordinator], ButtonEntit
     async def async_press(self) -> None:
         """Press the button."""
         uuid_str = self.coordinator.entry.data[CONF_UUID]
-        await self.client.switch_camera(uuid_str)
+        LOGGER.debug("Switch camera button pressed: uuid=%s", uuid_str)
+        position = await self.client.switch_camera(uuid_str)
+        LOGGER.debug("Switch camera request completed: new position=%s", position)
         await self.coordinator.async_request_refresh()
 
 
@@ -157,6 +161,12 @@ class TJA470OpenDoorButton(CoordinatorEntity[TJA470Coordinator], ButtonEntity):
     async def async_press(self) -> None:
         """Press the button."""
         uuid_str = self.coordinator.entry.data[CONF_UUID]
+        LOGGER.debug(
+            "Open door button pressed: sip_id=%s, position=%s",
+            self.element.sip_id,
+            self.element.order,
+        )
         await self.client.open_door_at_position(
             uuid_str, self.element.order, door_id=1
         )
+        LOGGER.debug("Open door request completed: sip_id=%s", self.element.sip_id)

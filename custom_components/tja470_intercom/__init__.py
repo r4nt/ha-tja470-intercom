@@ -418,7 +418,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         )
         for cli in clients:
             try:
+                LOGGER.debug("open_door action: door_id=%s", door_id)
                 await cli.open_door(door_id=door_id)
+                LOGGER.debug("open_door action completed")
             except TJA470Error as err:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -446,11 +448,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 except AttributeError:
                     pass
             if not client_uuid:
+                LOGGER.warning("No config entry found for TJA470 client, skipping")
                 continue
             try:
+                LOGGER.debug(
+                    "open_door_at_position action: position=%s, door_id=%s, max_attempts=%s",
+                    position,
+                    door_id,
+                    max_attempts,
+                )
                 await cli.open_door_at_position(
                     client_uuid, position, door_id=door_id, max_attempts=max_attempts
                 )
+                LOGGER.debug("open_door_at_position action completed")
             except TJA470Error as err:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -477,14 +487,23 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 except AttributeError:
                     pass
             if not client_uuid:
+                LOGGER.warning("No config entry found for TJA470 client, skipping")
                 continue
             try:
                 if position is not None:
+                    LOGGER.debug(
+                        "switch_camera action: position=%s, max_attempts=%s",
+                        position,
+                        max_attempts,
+                    )
                     await cli.switch_to_camera_position(
                         client_uuid, position, max_attempts=max_attempts
                     )
                 else:
-                    await cli.switch_camera(client_uuid)
+                    LOGGER.debug("switch_camera action: next position")
+                    new_position = await cli.switch_camera(client_uuid)
+                    LOGGER.debug("switch_camera action: new position=%s", new_position)
+                LOGGER.debug("switch_camera action completed")
             except TJA470Error as err:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
